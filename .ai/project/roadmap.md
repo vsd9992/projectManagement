@@ -8,7 +8,8 @@ modified: 2026-08-27
 - [x] Product/business-line shape, localization approach, tenancy model, MVP vertical decided (see `.ai/decisions/current/`).
 - [x] System design baseline written (`project-plan.md`, `requirements.md`, `architecture.md`, `workflows.md`, `risks.md`).
 - [x] Backend/frontend framework & language decision: Rust/Axum/SeaORM+SQLx/PostgreSQL, React/TypeScript (see `.ai/decisions/current/2026-08-27-technology-stack-backend-frontend.md`).
-- [ ] Remaining stack items, being tackled one at a time: multi-tenant isolation strategy (RLS vs. schema-per-tenant), typed API contract generation (leaning `utoipa`), auth/authorization mechanism, hosting/deployment target.
+- [x] Multi-tenant isolation strategy: shared schema + PostgreSQL row-level security (see `.ai/decisions/current/2026-08-27-tenant-isolation-shared-schema-rls.md`).
+- [ ] Remaining stack items, being tackled one at a time: typed API contract generation (leaning `utoipa`), auth/authorization mechanism, hosting/deployment target.
 
 ## Phase 2 — Execution (MVP: Turnkey Interiors, full depth)
 Not started. Planned milestones:

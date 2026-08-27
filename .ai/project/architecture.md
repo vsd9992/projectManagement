@@ -53,8 +53,10 @@ Each workstream instance has its own status/state machine and progresses indepen
 - **Frontend**: React + TypeScript. Node.js is build tooling only, not a server-side layer.
 - See `.ai/decisions/current/2026-08-27-technology-stack-backend-frontend.md` for the full rationale and what was explicitly dropped (SurrealDB).
 
+## Multi-Tenant Isolation
+Shared database/schema; every tenant-scoped table has a `tenant_id` column enforced by PostgreSQL row-level security. Tenant context is set per-request via `SET LOCAL` inside the request's transaction. See `.ai/decisions/current/2026-08-27-tenant-isolation-shared-schema-rls.md` for full rationale and constraints (two DB roles required: RLS-enforced app role, and a separate `BYPASSRLS` role for platform-admin/cross-tenant tooling).
+
 ## Known Open Architecture Decisions (remaining stack items)
-- Multi-tenant data isolation strategy (Postgres row-level security via session variables vs. schema-per-tenant vs. database-per-tenant) — leaning RLS, not yet locked.
 - Typed API contract generation from Axum to the React frontend (leaning `utoipa` for OpenAPI generation) — not yet locked.
 - Authentication/authorization mechanism — not yet discussed.
 - Hosting/deployment target — not yet discussed.

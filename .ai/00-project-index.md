@@ -1,7 +1,7 @@
 # Project Index
 
 **Project**: Multi-tenant PM SaaS for furniture manufacturing, turnkey interiors, and civil/architectural projects.
-**Phase**: Planning & Evaluation — baseline established; backend/frontend stack locked (Rust/Axum/SeaORM+SQLx/PostgreSQL, React/TypeScript); remaining stack items (tenant isolation strategy, API contract generation, auth, hosting) being resolved one at a time.
+**Phase**: Planning & Evaluation — baseline established; backend/frontend stack and tenant isolation strategy locked (Rust/Axum/SeaORM+SQLx/PostgreSQL with shared-schema RLS, React/TypeScript); remaining stack items (API contract generation, auth, hosting) being resolved one at a time.
 **Milestone**: None started — Execution has not begun.
 **Active tasks**: None.
 
@@ -22,10 +22,12 @@
 - `change-order-requires-client-approval` — Change Orders not binding without formal client approval
 - `mvp-finance-and-vendor-access-scope` — minimal Finance role in MVP; procurement internal-facing only
 - `technology-stack-backend-frontend` — Rust/Axum/SeaORM+SQLx/PostgreSQL backend, React/TypeScript frontend; SurrealDB dropped
+- `tenant-isolation-shared-schema-rls` — shared schema + Postgres row-level security for multi-tenant isolation
 
 ## Risk pointers
-See `project/risks.md` — 6 active risks (breadth-vs-depth, workstream over-engineering, billing engine India-correctness, multi-tenant data isolation undecided, traceability retrofit cost, UX-vs-entity-breadth).
+See `project/risks.md` — 5 active risks (breadth-vs-depth, workstream over-engineering, billing engine India-correctness, traceability retrofit cost, UX-vs-entity-breadth). Multi-tenant isolation risk resolved via `tenant-isolation-shared-schema-rls`.
 
 ## History
 - 2026-08-27 — Baseline system design (entities, tenancy, workflow, MVP scope) established through planning discussion; six foundational decisions recorded; AGENTS.md/.ai/ structure bootstrapped.
 - 2026-08-27 — Backend/frontend technology stack locked (Rust/Axum/SeaORM+SQLx/PostgreSQL, React/TypeScript); remaining stack sub-decisions to follow one at a time.
+- 2026-08-27 — Multi-tenant isolation strategy locked (shared schema + PostgreSQL RLS).
