@@ -1,6 +1,7 @@
 # Secrets & local config — never commit credentials, keys, or kubeconfigs
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 kubeconfig*
