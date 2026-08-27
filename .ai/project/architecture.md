@@ -48,8 +48,15 @@ Each workstream instance has its own status/state machine and progresses indepen
 - **Tenant-level configurability**: approval chains, billing/tax rule profile, and workstream labels are configuration, not code — so onboarding a new tenant or region doesn't require a redeploy (composable, per the IFS Cloud vs. SAP lesson in the market research).
 - **Generic billing engine**: billing method (milestone / progressive RA-style / lump-sum) and tax rules are abstracted behind a Region Rule Profile; India is the first concrete profile, built to be one of several, not hardcoded into the core.
 
-## Known Open Architecture Decisions (deferred to stack discussion)
-- Multi-tenant data isolation strategy (shared schema + tenant_id vs. schema-per-tenant vs. database-per-tenant).
+## Technology Stack
+- **Backend**: Rust, Axum (web framework), SeaORM (primary entity/CRUD layer) + SQLx (raw compile-time-checked SQL for billing calculations, audit-log queries, dependency-graph CTEs), PostgreSQL.
+- **Frontend**: React + TypeScript. Node.js is build tooling only, not a server-side layer.
+- See `.ai/decisions/current/2026-08-27-technology-stack-backend-frontend.md` for the full rationale and what was explicitly dropped (SurrealDB).
+
+## Known Open Architecture Decisions (remaining stack items)
+- Multi-tenant data isolation strategy (Postgres row-level security via session variables vs. schema-per-tenant vs. database-per-tenant) — leaning RLS, not yet locked.
+- Typed API contract generation from Axum to the React frontend (leaning `utoipa` for OpenAPI generation) — not yet locked.
+- Authentication/authorization mechanism — not yet discussed.
+- Hosting/deployment target — not yet discussed.
 - Concrete state-machine/workflow-engine implementation for concurrent workstreams and dependency graphs.
 - Document storage/versioning backend.
-- Technology stack itself (backend, frontend, database, hosting) — see `roadmap.md`.

@@ -39,4 +39,4 @@ BASELINE (change only on an approved decision; update the `modified:` date on ed
 - Verification: task-level verification lives in the task file; milestone-level lives in `roadmap.md`; phase/release-level gets its own file in `.ai/verification/` only when it has genuine lasting value. Never mark something verified without actual supporting checks.
 
 ## Canonical commands
-_Not yet established — the technology stack has not been chosen. Update this section (install/build/test/lint/dev commands) as soon as the stack is decided._
+_Stack decided (Rust/Axum/SeaORM+SQLx/PostgreSQL backend, React/TypeScript frontend — see `.ai/decisions/current/2026-08-27-technology-stack-backend-frontend.md`), but the repository has not been scaffolded yet. Fill in real install/build/test/lint/dev commands here once the scaffold exists — do not guess them._

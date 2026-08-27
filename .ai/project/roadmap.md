@@ -7,7 +7,8 @@ modified: 2026-08-27
 - [x] Market/competitive research reviewed.
 - [x] Product/business-line shape, localization approach, tenancy model, MVP vertical decided (see `.ai/decisions/current/`).
 - [x] System design baseline written (`project-plan.md`, `requirements.md`, `architecture.md`, `workflows.md`, `risks.md`).
-- [ ] Technology stack decision (backend, frontend, database, hosting, multi-tenancy isolation strategy) — next up, explicitly deferred until this baseline was in place.
+- [x] Backend/frontend framework & language decision: Rust/Axum/SeaORM+SQLx/PostgreSQL, React/TypeScript (see `.ai/decisions/current/2026-08-27-technology-stack-backend-frontend.md`).
+- [ ] Remaining stack items, being tackled one at a time: multi-tenant isolation strategy (RLS vs. schema-per-tenant), typed API contract generation (leaning `utoipa`), auth/authorization mechanism, hosting/deployment target.
 
 ## Phase 2 — Execution (MVP: Turnkey Interiors, full depth)
 Not started. Planned milestones:
