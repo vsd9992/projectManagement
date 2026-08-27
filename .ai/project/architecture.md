@@ -56,9 +56,11 @@ Each workstream instance has its own status/state machine and progresses indepen
 ## Multi-Tenant Isolation
 Shared database/schema; every tenant-scoped table has a `tenant_id` column enforced by PostgreSQL row-level security. Tenant context is set per-request via `SET LOCAL` inside the request's transaction. See `.ai/decisions/current/2026-08-27-tenant-isolation-shared-schema-rls.md` for full rationale and constraints (two DB roles required: RLS-enforced app role, and a separate `BYPASSRLS` role for platform-admin/cross-tenant tooling).
 
+## Authentication & Authorization
+Server-side sessions (opaque token, httpOnly Secure cookie, stored in PostgreSQL), Argon2 password hashing, single global login (tenant resolved from the account, not a subdomain). The Client Portal uses the same session mechanism as internal users, scoped to project access instead of a business-unit role. See `.ai/decisions/current/2026-08-27-auth-session-based-single-login.md` for full rationale.
+
 ## Known Open Architecture Decisions (remaining stack items)
 - Typed API contract generation from Axum to the React frontend (leaning `utoipa` for OpenAPI generation) — not yet locked.
-- Authentication/authorization mechanism — not yet discussed.
 - Hosting/deployment target — not yet discussed.
 - Concrete state-machine/workflow-engine implementation for concurrent workstreams and dependency graphs.
 - Document storage/versioning backend.
