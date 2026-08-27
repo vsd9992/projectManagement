@@ -3,7 +3,7 @@ modified: 2026-08-27
 # Roadmap
 
 ## Phase 1 — Planning & Evaluation
-**Status: baseline established.**
+**Status: complete.**
 - [x] Market/competitive research reviewed.
 - [x] Product/business-line shape, localization approach, tenancy model, MVP vertical decided (see `.ai/decisions/current/`).
 - [x] System design baseline written (`project-plan.md`, `requirements.md`, `architecture.md`, `workflows.md`, `risks.md`).
@@ -13,13 +13,14 @@ modified: 2026-08-27
 - [x] Typed API contract generation: `utoipa` (Axum → OpenAPI) + `orval` (typed client + React Query hooks) — see `.ai/decisions/current/2026-08-27-api-contract-utoipa-orval-react-query.md`.
 - [x] Hosting/deployment target: local dev server for development, Kubernetes (Linode or E2E, TBD) for production — see `.ai/decisions/current/2026-08-27-hosting-dev-local-prod-kubernetes.md`.
 
-**All technology-stack items resolved.** Baseline is complete; Phase 1 (Planning & Evaluation) is ready to conclude once the user confirms readiness to move into Execution (repository scaffolding).
+**All technology-stack items resolved.**
 
 ## Phase 2 — Execution (MVP: Turnkey Interiors, full depth)
-Not started. Planned milestones:
 
-- **M1 — Foundation**: tenancy/auth/org model (Tenant, Business Unit, User, Role), Project entity with enabled Workstreams, base entity CRUD + Audit Log wired in from the start (per risk #5 in `risks.md`).
-  - Verification: a tenant with 2+ business units can be created; a project can be created with an arbitrary subset of workstreams enabled; every create/update produces an audit log entry.
+- **M1 — Foundation**: tenancy/auth/org model (Tenant, Business Unit, User, Role), Project entity with enabled Workstreams, base entity CRUD + Audit Log wired in from the start (per risk #5 in `risks.md`). **Status: complete and verified.**
+  - Implementation: Rust/Axum/SeaORM/SQLx/PostgreSQL workspace (`backend/`) — migration crate (core schema + RLS policies), entity crate, Axum API with session-based auth (signup/login/logout), business unit and client CRUD, and project creation with an arbitrary workstream subset.
+  - Verification (run 2026-08-27 against a live PostgreSQL instance on the dev server, not just compiled): signed up a tenant, created 2 business units and a client under it; created a turnkey project with 3 workstreams (design, procurement, site_execution) and a separate pure-manufacturing project with 1 workstream (manufacturing) — confirming the composable workstream model handles both shapes on the same entity. `audit_log` row counts matched every create exactly (2 tenants, 2 users, 2 business units, 1 client, 2 projects, 4 project_workstreams). RLS isolation confirmed at both the API level (a second tenant's session sees zero of the first tenant's business units/projects) and directly at the database level (the `app_user` role sees 0 rows with no tenant context set, and only the correct tenant's rows once `SET LOCAL app.tenant_id` is issued).
+  - One real bug found and fixed during verification: the tenant-creation audit-log entry referenced `actor_user_id` before the user row existed in the same transaction, violating the FK constraint — fixed by recording that specific entry with no actor (self-signup has no prior actor for the tenant-creation event).
 - **M2 — Sales & Design workstream**: Lead → Quotation (versioned BOQ) → Design (versioned drawings/specs) → Client Approval loop.
   - Verification: a design revision can be submitted, and a client-role user can approve/reject it; approval status and full revision history are visible.
 - **M3 — Change Orders**: scope change entity, links to WBS/BOQ, client-approval-required flow, re-baselining.

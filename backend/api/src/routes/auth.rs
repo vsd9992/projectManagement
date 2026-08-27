@@ -87,7 +87,10 @@ pub async fn signup(
                     "tenant",
                     tenant_id,
                     "create",
-                    Some(user_id),
+                    // No actor yet: the user row that will own this signup
+                    // doesn't exist until the insert below, and audit_log's
+                    // actor_user_id FK can't point at a not-yet-inserted row.
+                    None,
                     None,
                     Some(serde_json::json!({ "name": tenant_name })),
                 )

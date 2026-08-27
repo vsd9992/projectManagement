@@ -1,8 +1,8 @@
 # Project Index
 
 **Project**: Multi-tenant PM SaaS for furniture manufacturing, turnkey interiors, and civil/architectural projects.
-**Phase**: Planning & Evaluation — baseline complete. Full stack locked: Rust/Axum/SeaORM+SQLx/PostgreSQL with shared-schema RLS, session-based auth, utoipa+orval+React Query, React/TypeScript; dev on local Debian server, production on Kubernetes (Linode or E2E, TBD). Ready to move to Execution (repo scaffolding) pending user confirmation.
-**Milestone**: None started — Execution has not begun.
+**Phase**: Execution (Phase 2), MVP = Turnkey Interiors.
+**Milestone**: M1 (Foundation) complete and verified against a live database on the dev server. M2 (Sales & Design workstream) not started.
 **Active tasks**: None.
 
 ## Documents
@@ -37,3 +37,4 @@ See `project/risks.md` — 5 active risks (breadth-vs-depth, workstream over-eng
 - 2026-08-27 — Auth/authorization mechanism locked (server-side sessions, single global login, unified Client Portal auth).
 - 2026-08-27 — API contract generation locked (utoipa + orval); React Query adopted as frontend data-fetching library.
 - 2026-08-27 — Hosting locked (local dev server for development; Kubernetes on Linode or E2E for production, provider TBD). Full technology-stack baseline complete.
+- 2026-08-27 — M1 (Foundation) built and verified against a live PostgreSQL instance on the dev server: tenancy/BU/project/workstream/audit_log all confirmed working, including RLS tenant isolation at the DB level. One bug found and fixed (audit-log FK ordering during signup).
