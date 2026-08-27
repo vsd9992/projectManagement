@@ -15,7 +15,8 @@ uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-sea-orm = { version = "1", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-uuid", "with-chrono", "with-json"] }
+sea-orm = { version = "1", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-uuid", "with-chrono", "with-json", "with-rust_decimal"] }
 sea-orm-migration = { version = "1", features = ["runtime-tokio-rustls", "sqlx-postgres"] }
 thiserror = "1"
 anyhow = "1"
+rust_decimal = { version = "1", features = ["serde-with-str"] }

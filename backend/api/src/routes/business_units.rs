@@ -46,7 +46,7 @@ pub async fn create_business_unit(
                     "business_unit",
                     id,
                     "create",
-                    Some(user.user_id),
+                    audit::Actor::User(user.user_id),
                     None,
                     Some(serde_json::json!({ "name": name })),
                 )

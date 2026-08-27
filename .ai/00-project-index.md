@@ -2,7 +2,7 @@
 
 **Project**: Multi-tenant PM SaaS for furniture manufacturing, turnkey interiors, and civil/architectural projects.
 **Phase**: Execution (Phase 2), MVP = Turnkey Interiors.
-**Milestone**: M1 (Foundation) complete and verified against a live database on the dev server. M2 (Sales & Design workstream) not started.
+**Milestone**: M1 and M2 complete and verified against a live database on the dev server. M3 (Change Orders) not started.
 **Active tasks**: None.
 
 ## Documents
@@ -26,6 +26,7 @@
 - `auth-session-based-single-login` — server-side sessions + Argon2, single global login, unified auth for internal + Client Portal
 - `api-contract-utoipa-orval-react-query` — utoipa OpenAPI spec + orval-generated client/React Query hooks
 - `hosting-dev-local-prod-kubernetes` — local dev server; production Kubernetes on Linode or E2E (TBD)
+- `client-portal-auth-pulled-into-m2` — Client Portal login/auth built in M2 (not deferred to M5) since design approval needs a real client actor
 
 ## Risk pointers
 See `project/risks.md` — 5 active risks (breadth-vs-depth, workstream over-engineering, billing engine India-correctness, traceability retrofit cost, UX-vs-entity-breadth). Multi-tenant isolation risk resolved via `tenant-isolation-shared-schema-rls`.
@@ -38,3 +39,4 @@ See `project/risks.md` — 5 active risks (breadth-vs-depth, workstream over-eng
 - 2026-08-27 — API contract generation locked (utoipa + orval); React Query adopted as frontend data-fetching library.
 - 2026-08-27 — Hosting locked (local dev server for development; Kubernetes on Linode or E2E for production, provider TBD). Full technology-stack baseline complete.
 - 2026-08-27 — M1 (Foundation) built and verified against a live PostgreSQL instance on the dev server: tenancy/BU/project/workstream/audit_log all confirmed working, including RLS tenant isolation at the DB level. One bug found and fixed (audit-log FK ordering during signup).
+- 2026-08-27 — M2 (Sales & Design workstream) built and verified: lead-to-project conversion, versioned quotations, versioned design revisions with real client-portal approve/reject, and cross-client isolation within a tenant — all confirmed against the live database, not just compiled.

@@ -112,6 +112,7 @@ dependencies = [
  "entity",
  "hex",
  "rand",
+ "rust_decimal",
  "sea-orm",
  "serde",
  "serde_json",
@@ -699,6 +700,7 @@ name = "entity"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "rust_decimal",
  "sea-orm",
  "serde",
  "uuid",

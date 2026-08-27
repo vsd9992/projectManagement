@@ -11,6 +11,7 @@ pub struct Model {
     /// One of: "create", "update", "delete" (enforced by a DB CHECK constraint).
     pub action: String,
     pub actor_user_id: Option<Uuid>,
+    pub actor_client_user_id: Option<Uuid>,
     pub before_data: Option<Json>,
     pub after_data: Option<Json>,
     pub created_at: DateTimeWithTimeZone,

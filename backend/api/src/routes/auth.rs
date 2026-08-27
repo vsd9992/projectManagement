@@ -90,7 +90,7 @@ pub async fn signup(
                     // No actor yet: the user row that will own this signup
                     // doesn't exist until the insert below, and audit_log's
                     // actor_user_id FK can't point at a not-yet-inserted row.
-                    None,
+                    audit::Actor::System,
                     None,
                     Some(serde_json::json!({ "name": tenant_name })),
                 )
@@ -110,7 +110,7 @@ pub async fn signup(
                     "user",
                     user_id,
                     "create",
-                    Some(user_id),
+                    audit::Actor::User(user_id),
                     None,
                     Some(serde_json::json!({ "email": email })),
                 )
@@ -151,6 +151,27 @@ pub async fn login(
     }
 
     let token = session::create_session(&state.admin_db, user.tenant_id, user.id).await?;
+    Ok(jar.add(session_cookie(token)))
+}
+
+pub async fn client_login(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Json(req): Json<LoginRequest>,
+) -> Result<CookieJar, AppError> {
+    let client_user = entity::prelude::ClientUser::find()
+        .filter(entity::client_user::Column::Email.eq(&req.email))
+        .one(&state.admin_db)
+        .await?
+        .ok_or(AppError::Unauthorized)?;
+
+    if !password::verify_password(&req.password, &client_user.password_hash) {
+        return Err(AppError::Unauthorized);
+    }
+
+    let token =
+        session::create_client_session(&state.admin_db, client_user.tenant_id, client_user.id)
+            .await?;
     Ok(jar.add(session_cookie(token)))
 }
 

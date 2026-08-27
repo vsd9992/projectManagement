@@ -77,7 +77,7 @@ pub async fn create_project(
                         "project",
                         project_id,
                         "create",
-                        Some(user.user_id),
+                        audit::Actor::User(user.user_id),
                         None,
                         Some(serde_json::json!({
                             "name": name,
@@ -105,7 +105,7 @@ pub async fn create_project(
                             "project_workstream",
                             ws_id,
                             "create",
-                            Some(user.user_id),
+                            audit::Actor::User(user.user_id),
                             None,
                             Some(serde_json::json!({
                                 "project_id": project_id,
