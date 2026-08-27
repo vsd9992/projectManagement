@@ -62,7 +62,12 @@ Server-side sessions (opaque token, httpOnly Secure cookie, stored in PostgreSQL
 ## API Contract & Frontend Data Layer
 Axum generates an OpenAPI spec via `utoipa` (also serving Swagger UI). The React frontend consumes it via `orval`, generating typed client functions and React Query hooks per endpoint — React Query is the frontend's server-state library. See `.ai/decisions/current/2026-08-27-api-contract-utoipa-orval-react-query.md`.
 
-## Known Open Architecture Decisions (remaining stack items)
-- Hosting/deployment target — not yet discussed.
+## Hosting & Deployment
+Development runs against a local Debian dev server (LAN-only; credentials handled out-of-band, never committed). Production target is Kubernetes on either Linode or E2E Networks — provider not yet finalized, not a blocker for Execution. See `.ai/decisions/current/2026-08-27-hosting-dev-local-prod-kubernetes.md`.
+
+## Known Open Architecture Decisions
+- Production Kubernetes provider: Linode vs. E2E Networks — to resolve before actual production deployment, not before Execution.
+- Concrete state-machine/workflow-engine implementation for concurrent workstreams and dependency graphs — to design during Execution.
+- Document storage/versioning backend — to design during Execution.
 - Concrete state-machine/workflow-engine implementation for concurrent workstreams and dependency graphs.
 - Document storage/versioning backend.

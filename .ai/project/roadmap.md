@@ -11,7 +11,9 @@ modified: 2026-08-27
 - [x] Multi-tenant isolation strategy: shared schema + PostgreSQL row-level security (see `.ai/decisions/current/2026-08-27-tenant-isolation-shared-schema-rls.md`).
 - [x] Auth/authorization mechanism: server-side sessions + Argon2, single global login, unified session mechanism for internal users and the Client Portal (see `.ai/decisions/current/2026-08-27-auth-session-based-single-login.md`).
 - [x] Typed API contract generation: `utoipa` (Axum → OpenAPI) + `orval` (typed client + React Query hooks) — see `.ai/decisions/current/2026-08-27-api-contract-utoipa-orval-react-query.md`.
-- [ ] Remaining stack item: hosting/deployment target.
+- [x] Hosting/deployment target: local dev server for development, Kubernetes (Linode or E2E, TBD) for production — see `.ai/decisions/current/2026-08-27-hosting-dev-local-prod-kubernetes.md`.
+
+**All technology-stack items resolved.** Baseline is complete; Phase 1 (Planning & Evaluation) is ready to conclude once the user confirms readiness to move into Execution (repository scaffolding).
 
 ## Phase 2 — Execution (MVP: Turnkey Interiors, full depth)
 Not started. Planned milestones:
