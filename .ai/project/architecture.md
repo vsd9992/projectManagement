@@ -59,8 +59,10 @@ Shared database/schema; every tenant-scoped table has a `tenant_id` column enfor
 ## Authentication & Authorization
 Server-side sessions (opaque token, httpOnly Secure cookie, stored in PostgreSQL), Argon2 password hashing, single global login (tenant resolved from the account, not a subdomain). The Client Portal uses the same session mechanism as internal users, scoped to project access instead of a business-unit role. See `.ai/decisions/current/2026-08-27-auth-session-based-single-login.md` for full rationale.
 
+## API Contract & Frontend Data Layer
+Axum generates an OpenAPI spec via `utoipa` (also serving Swagger UI). The React frontend consumes it via `orval`, generating typed client functions and React Query hooks per endpoint — React Query is the frontend's server-state library. See `.ai/decisions/current/2026-08-27-api-contract-utoipa-orval-react-query.md`.
+
 ## Known Open Architecture Decisions (remaining stack items)
-- Typed API contract generation from Axum to the React frontend (leaning `utoipa` for OpenAPI generation) — not yet locked.
 - Hosting/deployment target — not yet discussed.
 - Concrete state-machine/workflow-engine implementation for concurrent workstreams and dependency graphs.
 - Document storage/versioning backend.

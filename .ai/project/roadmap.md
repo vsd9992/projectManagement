@@ -10,7 +10,8 @@ modified: 2026-08-27
 - [x] Backend/frontend framework & language decision: Rust/Axum/SeaORM+SQLx/PostgreSQL, React/TypeScript (see `.ai/decisions/current/2026-08-27-technology-stack-backend-frontend.md`).
 - [x] Multi-tenant isolation strategy: shared schema + PostgreSQL row-level security (see `.ai/decisions/current/2026-08-27-tenant-isolation-shared-schema-rls.md`).
 - [x] Auth/authorization mechanism: server-side sessions + Argon2, single global login, unified session mechanism for internal users and the Client Portal (see `.ai/decisions/current/2026-08-27-auth-session-based-single-login.md`).
-- [ ] Remaining stack items, being tackled one at a time: typed API contract generation (leaning `utoipa`), hosting/deployment target.
+- [x] Typed API contract generation: `utoipa` (Axum → OpenAPI) + `orval` (typed client + React Query hooks) — see `.ai/decisions/current/2026-08-27-api-contract-utoipa-orval-react-query.md`.
+- [ ] Remaining stack item: hosting/deployment target.
 
 ## Phase 2 — Execution (MVP: Turnkey Interiors, full depth)
 Not started. Planned milestones:

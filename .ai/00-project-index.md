@@ -1,7 +1,7 @@
 # Project Index
 
 **Project**: Multi-tenant PM SaaS for furniture manufacturing, turnkey interiors, and civil/architectural projects.
-**Phase**: Planning & Evaluation — baseline established; backend/frontend stack, tenant isolation, and auth locked (Rust/Axum/SeaORM+SQLx/PostgreSQL with shared-schema RLS, session-based auth, React/TypeScript); remaining stack items (API contract generation, hosting) being resolved one at a time.
+**Phase**: Planning & Evaluation — baseline established; backend/frontend stack, tenant isolation, auth, and API contract generation locked (Rust/Axum/SeaORM+SQLx/PostgreSQL with shared-schema RLS, session-based auth, utoipa+orval+React Query, React/TypeScript); remaining stack item: hosting/deployment target.
 **Milestone**: None started — Execution has not begun.
 **Active tasks**: None.
 
@@ -24,6 +24,7 @@
 - `technology-stack-backend-frontend` — Rust/Axum/SeaORM+SQLx/PostgreSQL backend, React/TypeScript frontend; SurrealDB dropped
 - `tenant-isolation-shared-schema-rls` — shared schema + Postgres row-level security for multi-tenant isolation
 - `auth-session-based-single-login` — server-side sessions + Argon2, single global login, unified auth for internal + Client Portal
+- `api-contract-utoipa-orval-react-query` — utoipa OpenAPI spec + orval-generated client/React Query hooks
 
 ## Risk pointers
 See `project/risks.md` — 5 active risks (breadth-vs-depth, workstream over-engineering, billing engine India-correctness, traceability retrofit cost, UX-vs-entity-breadth). Multi-tenant isolation risk resolved via `tenant-isolation-shared-schema-rls`.
@@ -33,3 +34,4 @@ See `project/risks.md` — 5 active risks (breadth-vs-depth, workstream over-eng
 - 2026-08-27 — Backend/frontend technology stack locked (Rust/Axum/SeaORM+SQLx/PostgreSQL, React/TypeScript); remaining stack sub-decisions to follow one at a time.
 - 2026-08-27 — Multi-tenant isolation strategy locked (shared schema + PostgreSQL RLS).
 - 2026-08-27 — Auth/authorization mechanism locked (server-side sessions, single global login, unified Client Portal auth).
+- 2026-08-27 — API contract generation locked (utoipa + orval); React Query adopted as frontend data-fetching library.
