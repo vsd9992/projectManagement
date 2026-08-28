@@ -5,8 +5,11 @@ mod client_portal;
 mod clients;
 pub mod design;
 mod leads;
+mod manufacturing;
+mod procurement;
 mod projects;
 mod quotations;
+mod site_execution;
 
 use axum::{
     routing::{get, post},
@@ -97,6 +100,62 @@ pub fn router() -> Router<AppState> {
         .route(
             "/client/change-orders/:id/reject",
             post(client_portal::reject_change_order),
+        )
+        // Procurement (internal-facing only in MVP — no vendor portal).
+        .route(
+            "/vendors",
+            get(procurement::list_vendors).post(procurement::create_vendor),
+        )
+        .route(
+            "/projects/:project_id/purchase-orders",
+            get(procurement::list_purchase_orders).post(procurement::create_purchase_order),
+        )
+        .route(
+            "/purchase-orders/:id/deliver",
+            post(procurement::mark_purchase_order_delivered),
+        )
+        // Manufacturing (simplified "production task" depth for MVP).
+        .route(
+            "/projects/:project_id/production-tasks",
+            get(manufacturing::list_production_tasks).post(manufacturing::create_production_task),
+        )
+        .route(
+            "/production-tasks/:id/status",
+            post(manufacturing::update_production_task_status),
+        )
+        // Site Execution.
+        .route(
+            "/projects/:project_id/site-tasks",
+            get(site_execution::list_site_tasks).post(site_execution::create_site_task),
+        )
+        .route(
+            "/site-tasks/:id/status",
+            post(site_execution::update_site_task_status),
+        )
+        .route(
+            "/site-tasks/:id/dependencies",
+            get(site_execution::list_site_task_dependencies)
+                .post(site_execution::add_site_task_dependency),
+        )
+        .route(
+            "/projects/:project_id/daily-logs",
+            get(site_execution::list_daily_logs).post(site_execution::create_daily_log),
+        )
+        .route(
+            "/projects/:project_id/punch-list",
+            get(site_execution::list_punch_list_items).post(site_execution::create_punch_list_item),
+        )
+        .route(
+            "/punch-list/:id/close",
+            post(site_execution::close_punch_list_item),
+        )
+        .route(
+            "/projects/:project_id/site-queries",
+            get(site_execution::list_site_queries).post(site_execution::create_site_query),
+        )
+        .route(
+            "/site-queries/:id/answer",
+            post(site_execution::answer_site_query),
         )
 }
 

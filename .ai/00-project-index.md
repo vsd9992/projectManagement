@@ -2,7 +2,7 @@
 
 **Project**: Multi-tenant PM SaaS for furniture manufacturing, turnkey interiors, and civil/architectural projects.
 **Phase**: Execution (Phase 2), MVP = Turnkey Interiors.
-**Milestone**: M1, M2, and M3 complete and verified against a live database on the dev server. M4 (Delivery workstreams) not started.
+**Milestone**: M1–M4 complete and verified against a live database on the dev server. M5 (Billing & Client Portal extensions) not started.
 **Active tasks**: None.
 
 ## Documents
@@ -41,3 +41,4 @@ See `project/risks.md` — 5 active risks (breadth-vs-depth, workstream over-eng
 - 2026-08-27 — M1 (Foundation) built and verified against a live PostgreSQL instance on the dev server: tenancy/BU/project/workstream/audit_log all confirmed working, including RLS tenant isolation at the DB level. One bug found and fixed (audit-log FK ordering during signup).
 - 2026-08-27 — M2 (Sales & Design workstream) built and verified: lead-to-project conversion, versioned quotations, versioned design revisions with real client-portal approve/reject, and cross-client isolation within a tenant — all confirmed against the live database, not just compiled.
 - 2026-08-28 — M3 (Change Orders) built and verified: quotation approve/reject (deferred from M2), Change Orders that add/modify/remove BOQ lines with a computed cost impact, client-approval-required re-baselining into a new quotation version, rejection leaving the baseline untouched, and audit_log showing explicit before/after for both outcomes. Schedule re-baselining explicitly deferred — no Schedule entity exists yet.
+- 2026-08-28 — M4 (Delivery workstreams) built and verified: vendors/POs tracked to delivered, site tasks with explicit dependency links, punch list raise/close, plus production tasks/daily logs/site queries — all internal-facing, all confirmed against the live database with audit_log counts matching exactly.
