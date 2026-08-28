@@ -86,6 +86,9 @@ pub async fn signup(
                     // Only "india" is implemented today (see api::billing);
                     // hardcoded here until a second region profile exists.
                     region_profile: Set("india".to_string()),
+                    status: Set("active".to_string()),
+                    paused_at: Set(None),
+                    deleted_at: Set(None),
                 };
                 tenant.insert(txn).await?;
                 audit::record(
@@ -109,6 +112,8 @@ pub async fn signup(
                     email: Set(email.clone()),
                     password_hash: Set(password_hash),
                     created_at: Set(chrono::Utc::now().into()),
+                    // The signing-up user is the tenant's founding admin.
+                    is_tenant_admin: Set(true),
                 };
                 user.insert(txn).await?;
                 audit::record(
@@ -170,17 +175,15 @@ pub struct CreateTeammateRequest {
 /// Creates a second internal user within the caller's own tenant — the
 /// missing piece that made "multiple branches, separate teams" impossible
 /// to actually exercise: signup always creates a brand-new tenant, so
-/// without this a tenant could only ever have one internal user. Any
-/// authenticated tenant user can invite a teammate for now (no distinct
-/// admin/owner role exists yet — see
-/// .ai/decisions/current/2026-08-28-no-rbac-enforcement-yet.md). No initial
-/// business-unit role is assigned; that's a separate call to
-/// `POST /business-units/:id/roles`.
+/// without this a tenant could only ever have one internal user.
+/// Tenant-admin only. No initial business-unit role is assigned; that's a
+/// separate call to `POST /business-units/:id/roles`.
 pub async fn create_teammate(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Json(req): Json<CreateTeammateRequest>,
 ) -> Result<Json<SignupResponse>, AppError> {
+    crate::authz::require_tenant_admin(user)?;
     if req.email.trim().is_empty() {
         return Err(AppError::BadRequest("email is required".into()));
     }
@@ -214,6 +217,7 @@ pub async fn create_teammate(
                     email: Set(email.clone()),
                     password_hash: Set(password_hash),
                     created_at: Set(chrono::Utc::now().into()),
+                    is_tenant_admin: Set(false),
                 };
                 am.insert(txn).await?;
                 audit::record(
@@ -273,16 +277,15 @@ pub async fn logout(
 
 /// Revokes every session belonging to `target_user_id` — the "instantly
 /// kill a departing employee's access" capability the session-based auth
-/// decision was chosen for, but hadn't actually been built until now (see
-/// .ai/decisions/current/2026-08-28-no-rbac-enforcement-yet.md). Any
-/// authenticated tenant user can revoke any other tenant user's sessions —
-/// there is no distinct admin/owner role yet to restrict this to further;
-/// tenant-level RLS is what stops it from reaching another tenant's users.
+/// decision was chosen for, but hadn't actually been built until now.
+/// Tenant-admin only; tenant-level RLS is what stops it from reaching
+/// another tenant's users.
 pub async fn revoke_user_sessions(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(target_user_id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
+    crate::authz::require_tenant_admin(user)?;
     let tenant_id = user.tenant_id;
     state
         .app_db
@@ -320,4 +323,70 @@ pub async fn revoke_user_sessions(
         .await
         .map_err(map_txn_err)?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+pub struct SetTenantAdminRequest {
+    pub is_tenant_admin: bool,
+}
+
+/// Promotes or demotes `target_user_id` to/from tenant admin. Tenant-admin
+/// only — an existing admin must grant the status; there is no other path
+/// to becoming one besides being the user who originally signed up. A user
+/// cannot demote themselves if they're the tenant's only remaining admin,
+/// to avoid a tenant permanently locking itself out of its own admin tier.
+pub async fn set_tenant_admin(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path(target_user_id): Path<Uuid>,
+    Json(req): Json<SetTenantAdminRequest>,
+) -> Result<Json<entity::user::Model>, AppError> {
+    crate::authz::require_tenant_admin(user)?;
+    let tenant_id = user.tenant_id;
+    let new_value = req.is_tenant_admin;
+
+    let model = state
+        .app_db
+        .transaction::<_, entity::user::Model, AppError>(|txn| {
+            Box::pin(async move {
+                set_tenant(txn, tenant_id).await?;
+                let target = entity::prelude::User::find_by_id(target_user_id)
+                    .one(txn)
+                    .await?
+                    .ok_or(AppError::NotFound)?;
+
+                if !new_value && target.is_tenant_admin {
+                    let other_admins = entity::prelude::User::find()
+                        .filter(entity::user::Column::IsTenantAdmin.eq(true))
+                        .filter(entity::user::Column::Id.ne(target_user_id))
+                        .one(txn)
+                        .await?;
+                    if other_admins.is_none() {
+                        return Err(AppError::BadRequest(
+                            "cannot demote the tenant's only remaining admin".into(),
+                        ));
+                    }
+                }
+
+                let before = serde_json::json!({ "is_tenant_admin": target.is_tenant_admin });
+                let mut am: entity::user::ActiveModel = target.into();
+                am.is_tenant_admin = Set(new_value);
+                let updated = am.update(txn).await?;
+                audit::record(
+                    txn,
+                    tenant_id,
+                    "user",
+                    target_user_id,
+                    "update",
+                    audit::Actor::User(user.user_id),
+                    Some(before),
+                    Some(serde_json::json!({ "is_tenant_admin": new_value })),
+                )
+                .await?;
+                Ok(updated)
+            })
+        })
+        .await
+        .map_err(map_txn_err)?;
+    Ok(Json(model))
 }

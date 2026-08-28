@@ -10,6 +10,10 @@ pub struct Model {
     #[serde(skip_serializing)]
     pub password_hash: String,
     pub created_at: DateTimeWithTimeZone,
+    /// Authority across the whole tenant (every business unit), unlike
+    /// user_business_unit_role which is per-BU. Set automatically for the
+    /// user who signs up (the tenant's founder).
+    pub is_tenant_admin: bool,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

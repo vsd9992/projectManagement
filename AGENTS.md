@@ -45,6 +45,7 @@ Backend lives in `backend/` (Cargo workspace: `migration`, `entity`, `api`). Pos
 - Run migrations (on devMachine, `DATABASE_URL` = the `app_migrator` superuser connection string from `.env`): `cargo run --bin migration -- up`
 - Run the server (on devMachine): `cargo run --bin api` (reads `DATABASE_URL_APP`/`DATABASE_URL_ADMIN`/`BIND_ADDR` from `.env`)
 - Run tests (on devMachine, against the dedicated `project_management_test` database — never the dev fixture data in `project_management`): `TEST_DATABASE_URL_APP=... TEST_DATABASE_URL_ADMIN=... cargo test -p api`
-- After any migration change: re-run `GRANT ALL ON ALL TABLES/SEQUENCES IN SCHEMA public TO app_user, app_admin;` (see `backend/scripts/setup_roles.sql`) — new tables aren't visible to the app roles until granted.
+- After any migration change: re-run `GRANT ALL ON ALL TABLES/SEQUENCES IN SCHEMA public TO app_user, app_admin;` (see `backend/scripts/setup_roles.sql`) — new tables aren't visible to the app roles until granted. Run this against **each** database individually (`psql -d <dbname> -c '...' -c '...'`) — passing multiple `-d` flags in one `psql` invocation does not run commands against multiple databases; the last `-d` silently wins for the whole invocation.
+- Bootstrap the first platform admin (on devMachine; no HTTP signup exists for this tier deliberately): `PLATFORM_ADMIN_PASSWORD=... cargo run --bin create_platform_admin -- <email>`.
 
 No frontend scaffold yet.

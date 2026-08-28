@@ -40,7 +40,7 @@ pub async fn create_design_asset(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("sales_design"),
                 )
@@ -86,7 +86,7 @@ pub async fn list_design_assets(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("sales_design"),
                 )
@@ -132,7 +132,7 @@ pub async fn submit_design_revision(
                     .ok_or(AppError::NotFound)?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     asset.project_id,
                     Some("sales_design"),
                 )
@@ -197,7 +197,7 @@ pub async fn list_design_revisions(
                     .ok_or(AppError::NotFound)?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     asset.project_id,
                     Some("sales_design"),
                 )

@@ -103,16 +103,30 @@ async fn lookup_session(
     if session.expires_at < Utc::now() {
         return Err(AppError::Unauthorized);
     }
+
+    // A paused/deleted tenant locks out every one of its users — internal
+    // and Client Portal alike — at the session level, not per-handler.
+    let tenant = entity::prelude::Tenant::find_by_id(session.tenant_id)
+        .one(&app_state.admin_db)
+        .await?
+        .ok_or(AppError::Unauthorized)?;
+    if tenant.status != "active" {
+        return Err(AppError::TenantSuspended);
+    }
+
     Ok(session)
 }
 
 /// The authenticated internal-user principal for a request, resolved from
 /// the session cookie. Rejects a session that belongs to a Client Portal
-/// user instead.
+/// user instead. `is_tenant_admin` lets `api::authz` short-circuit its
+/// business-unit/role checks for tenant admins, who have authority across
+/// the whole tenant.
 #[derive(Clone, Copy, Debug)]
 pub struct AuthenticatedUser {
     pub user_id: Uuid,
     pub tenant_id: Uuid,
+    pub is_tenant_admin: bool,
 }
 
 #[axum::async_trait]
@@ -127,9 +141,14 @@ where
         let app_state = AppState::from_ref(state);
         let session = lookup_session(&app_state, parts).await?;
         let user_id = session.user_id.ok_or(AppError::Unauthorized)?;
+        let user = entity::prelude::User::find_by_id(user_id)
+            .one(&app_state.admin_db)
+            .await?
+            .ok_or(AppError::Unauthorized)?;
         Ok(AuthenticatedUser {
             user_id,
             tenant_id: session.tenant_id,
+            is_tenant_admin: user.is_tenant_admin,
         })
     }
 }
@@ -169,6 +188,68 @@ where
             client_user_id,
             client_id: client_user.client_id,
             tenant_id: session.tenant_id,
+        })
+    }
+}
+
+// ---- Platform admin sessions — deliberately separate from everything
+// above (see entity::platform_admin for why). Different cookie name so a
+// platform-admin session and a tenant session can never be confused with
+// each other, even in the same browser. ----
+
+pub const PLATFORM_SESSION_COOKIE_NAME: &str = "platform_session_token";
+
+pub async fn create_platform_session(
+    db: &sea_orm::DatabaseConnection,
+    platform_admin_id: Uuid,
+) -> Result<String, AppError> {
+    let token = generate_token();
+    let token_hash = hash_token(&token);
+    let now = Utc::now();
+    let am = entity::platform_admin_session::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        platform_admin_id: Set(platform_admin_id),
+        token_hash: Set(token_hash),
+        created_at: Set(now.into()),
+        expires_at: Set((now + Duration::days(SESSION_TTL_DAYS)).into()),
+    };
+    am.insert(db).await?;
+    Ok(token)
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct AuthenticatedPlatformAdmin {
+    pub platform_admin_id: Uuid,
+}
+
+#[axum::async_trait]
+impl<S> FromRequestParts<S> for AuthenticatedPlatformAdmin
+where
+    AppState: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let app_state = AppState::from_ref(state);
+        let jar = CookieJar::from_headers(&parts.headers);
+        let token = jar
+            .get(PLATFORM_SESSION_COOKIE_NAME)
+            .map(|c: &Cookie| c.value().to_string())
+            .ok_or(AppError::Unauthorized)?;
+        let token_hash = hash_token(&token);
+
+        let session = entity::prelude::PlatformAdminSession::find()
+            .filter(entity::platform_admin_session::Column::TokenHash.eq(token_hash))
+            .one(&app_state.admin_db)
+            .await?
+            .ok_or(AppError::Unauthorized)?;
+        if session.expires_at < Utc::now() {
+            return Err(AppError::Unauthorized);
+        }
+
+        Ok(AuthenticatedPlatformAdmin {
+            platform_admin_id: session.platform_admin_id,
         })
     }
 }

@@ -42,7 +42,7 @@ pub async fn create_production_task(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("delivery"),
                 )
@@ -89,7 +89,7 @@ pub async fn list_production_tasks(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("delivery"),
                 )
@@ -137,7 +137,7 @@ pub async fn update_production_task_status(
                     .ok_or(AppError::NotFound)?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     task.project_id,
                     Some("delivery"),
                 )

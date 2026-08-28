@@ -2,7 +2,7 @@
 
 **Project**: Multi-tenant PM SaaS for furniture manufacturing, turnkey interiors, and civil/architectural projects.
 **Phase**: Execution (Phase 2), MVP = Turnkey Interiors.
-**Milestone**: M1–M5 complete; RBAC/business-unit-scoping hardening pass also complete (inserted before M6 after a risk review). M6 (MVP scenario verification) not started.
+**Milestone**: M1–M5 complete; two pre-M6 hardening passes also complete (RBAC/business-unit-scoping, then tenant-admin/platform-manager — both inserted after a risk review, at the user's request). M6 (MVP scenario verification) not started.
 **Active tasks**: None.
 
 ## Documents
@@ -12,7 +12,7 @@
 - `project/workflows.md` — project lifecycle, change-order flow, approvals, scenario walkthroughs
 - `project/roadmap.md` — phases, milestones, status
 - `project/risks.md` — active cross-cutting risks
-- `decisions/current/` — 14 active decisions recorded (below); 1 archived (superseded)
+- `decisions/current/` — 15 active decisions recorded (below); 1 archived (superseded)
 
 ## Decision pointers (current)
 - `multi-tenant-saas-product` — SaaS from day one, not internal tool
@@ -28,9 +28,10 @@
 - `hosting-dev-local-prod-kubernetes` — local dev server; production Kubernetes on Linode or E2E (TBD)
 - `client-portal-auth-pulled-into-m2` — Client Portal login/auth built in M2 (not deferred to M5) since design approval needs a real client actor
 - `rbac-business-unit-scoping-implemented` — role + business-unit-membership enforcement across all internal endpoints; supersedes archived `no-rbac-enforcement-yet`
+- `tenant-admin-and-platform-manager` — per-tenant admin (roll-up visibility, org management) + fully separate platform-manager tier (pause/resume/delete tenant lifecycle only, no tenant business data access)
 
 ## Risk pointers
-See `project/risks.md` — 7 active risks (breadth-vs-depth, workstream over-engineering, billing engine India-correctness [GST/TDS/retention verified, mobilization advance still missing], traceability retrofit cost, UX-vs-entity-breadth, no admin/owner role, no automated regression suite for M1–M5). Multi-tenant isolation and RBAC/business-unit-scoping risks resolved.
+See `project/risks.md` — 6 active risks (breadth-vs-depth, workstream over-engineering, billing engine India-correctness [GST/TDS/retention verified, mobilization advance still missing], traceability retrofit cost, UX-vs-entity-breadth, no automated regression suite for M1–M5). Multi-tenant isolation, RBAC/business-unit-scoping, and no-admin/owner-role risks all resolved.
 
 ## History
 - 2026-08-27 — Baseline system design (entities, tenancy, workflow, MVP scope) established through planning discussion; six foundational decisions recorded; AGENTS.md/.ai/ structure bootstrapped.
@@ -45,3 +46,4 @@ See `project/risks.md` — 7 active risks (breadth-vs-depth, workstream over-eng
 - 2026-08-28 — M4 (Delivery workstreams) built and verified: vendors/POs tracked to delivered, site tasks with explicit dependency links, punch list raise/close, plus production tasks/daily logs/site queries — all internal-facing, all confirmed against the live database with audit_log counts matching exactly.
 - 2026-08-28 — M5 (Billing & Client Portal) built and verified: milestone-gated invoices via a pluggable IndiaGstProfile (GST 18% + GST TDS 2%), verified against independently hand-computed figures; mark-paid, client visibility, and cross-client isolation all confirmed. Recorded that no RBAC enforcement exists yet (consistent gap since M2, not Finance-specific) as an active risk.
 - 2026-08-28 — Pre-M6 risk/decision review, at the user's request, before proceeding to M6. Surfaced that "no RBAC" was actually two gaps (role AND business-unit membership unchecked), plus two smaller undiscovered gaps (no automated tests, no admin session-revocation despite that being the session-auth decision's own rationale). User chose to fix RBAC now rather than after M6, bundling the smaller gaps in. Implemented `api::authz` enforcement across every internal endpoint, `POST /business-units/:id/roles` (role assignment — didn't exist), `POST /users` (second internal user per tenant — didn't exist, so "separate teams" was previously untestable), `POST /users/:id/revoke-sessions`, and a new integration-test suite (`backend/api/tests/authz.rs`) run against a dedicated test database. Verified against both the new test suite and the existing M1–M5 dev-server data (pre-existing user correctly locked out, then restored via retroactive role assignment).
+- 2026-08-28 — User requested a distinct admin/owner tier in the same review, closing the gap the RBAC pass had explicitly left open: a per-tenant admin (roll-up visibility, org-management-only actions, promote/demote with a last-admin guard) and a fully separate platform-manager tier (pause/resume/soft-delete a tenant, bootstrapped via CLI only, zero access to tenant business data). Added a backfill migration so pre-existing tenants weren't permanently locked out of org management by the new column's default. Test suite grew to 6 (rewrote the original 4 to use a non-admin teammate, since the signing-up owner now always bypasses role checks). Caught and fixed a real gap during this same pass: platform pause/resume/delete actions weren't being written to audit_log at all — found via a live query, fixed, re-verified.

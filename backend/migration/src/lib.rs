@@ -5,6 +5,8 @@ mod m20260827_000002_add_sales_design_workstream;
 mod m20260827_000003_add_change_orders;
 mod m20260828_000004_add_delivery_workstreams;
 mod m20260828_000005_add_billing;
+mod m20260828_000006_add_platform_and_tenant_admin;
+mod m20260828_000007_backfill_tenant_admin;
 
 pub struct Migrator;
 
@@ -17,6 +19,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20260827_000003_add_change_orders::Migration),
             Box::new(m20260828_000004_add_delivery_workstreams::Migration),
             Box::new(m20260828_000005_add_billing::Migration),
+            Box::new(m20260828_000006_add_platform_and_tenant_admin::Migration),
+            Box::new(m20260828_000007_backfill_tenant_admin::Migration),
         ]
     }
 }

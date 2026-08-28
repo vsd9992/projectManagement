@@ -13,6 +13,8 @@ pub enum AppError {
     Unauthorized,
     #[error("forbidden")]
     Forbidden,
+    #[error("tenant is paused or has been deleted")]
+    TenantSuspended,
     #[error("bad request: {0}")]
     BadRequest(String),
     #[error("database error: {0}")]
@@ -37,6 +39,7 @@ impl IntoResponse for AppError {
             AppError::NotFound => (StatusCode::NOT_FOUND, self.to_string()),
             AppError::Unauthorized => (StatusCode::UNAUTHORIZED, self.to_string()),
             AppError::Forbidden => (StatusCode::FORBIDDEN, self.to_string()),
+            AppError::TenantSuspended => (StatusCode::FORBIDDEN, self.to_string()),
             AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, self.to_string()),
             AppError::Db(e) => {
                 tracing::error!(error = %e, "database error");

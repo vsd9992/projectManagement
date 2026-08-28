@@ -135,7 +135,7 @@ pub async fn create_purchase_order(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("delivery"),
                 )
@@ -225,7 +225,7 @@ pub async fn list_purchase_orders(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("delivery"),
                 )
@@ -259,7 +259,7 @@ pub async fn mark_purchase_order_delivered(
                     .ok_or(AppError::NotFound)?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     po.project_id,
                     Some("delivery"),
                 )

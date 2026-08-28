@@ -75,7 +75,7 @@ pub async fn create_change_order(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("sales_design"),
                 )
@@ -213,7 +213,7 @@ pub async fn list_change_orders(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("sales_design"),
                 )
@@ -246,7 +246,7 @@ pub async fn get_change_order(
                 };
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     change_order.project_id,
                     Some("sales_design"),
                 )

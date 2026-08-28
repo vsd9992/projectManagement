@@ -60,7 +60,7 @@ pub async fn create_quotation(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("sales_design"),
                 )
@@ -151,7 +151,7 @@ pub async fn list_quotations(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("sales_design"),
                 )
@@ -185,7 +185,7 @@ pub async fn get_quotation(
                 };
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     quotation.project_id,
                     Some("sales_design"),
                 )

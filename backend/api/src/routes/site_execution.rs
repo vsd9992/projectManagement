@@ -44,7 +44,7 @@ pub async fn create_site_task(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("delivery"),
                 )
@@ -91,7 +91,7 @@ pub async fn list_site_tasks(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("delivery"),
                 )
@@ -139,7 +139,7 @@ pub async fn update_site_task_status(
                     .ok_or(AppError::NotFound)?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     task.project_id,
                     Some("delivery"),
                 )
@@ -211,7 +211,7 @@ pub async fn add_site_task_dependency(
                 }
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     task.project_id,
                     Some("delivery"),
                 )
@@ -260,7 +260,7 @@ pub async fn list_site_task_dependencies(
                     .ok_or(AppError::NotFound)?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     task.project_id,
                     Some("delivery"),
                 )
@@ -305,7 +305,7 @@ pub async fn create_daily_log(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("delivery"),
                 )
@@ -352,7 +352,7 @@ pub async fn list_daily_logs(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("delivery"),
                 )
@@ -396,7 +396,7 @@ pub async fn create_punch_list_item(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("delivery"),
                 )
@@ -445,7 +445,7 @@ pub async fn list_punch_list_items(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("delivery"),
                 )
@@ -479,7 +479,7 @@ pub async fn close_punch_list_item(
                     .ok_or(AppError::NotFound)?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     item.project_id,
                     Some("delivery"),
                 )
@@ -540,7 +540,7 @@ pub async fn create_site_query(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("delivery"),
                 )
@@ -591,7 +591,7 @@ pub async fn list_site_queries(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("delivery"),
                 )
@@ -636,7 +636,7 @@ pub async fn answer_site_query(
                     .ok_or(AppError::NotFound)?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     query.project_id,
                     Some("delivery"),
                 )

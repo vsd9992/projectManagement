@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::{
     audit,
     auth::session::AuthenticatedUser,
+    authz,
     db::set_tenant,
     error::{map_txn_err, AppError},
     state::AppState,
@@ -19,11 +20,15 @@ pub struct CreateBusinessUnitRequest {
     pub name: String,
 }
 
+/// Tenant-admin only — creating a business unit is organization
+/// structure, not day-to-day team work (see
+/// .ai/decisions/current/2026-08-28-tenant-admin-and-platform-manager.md).
 pub async fn create_business_unit(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Json(req): Json<CreateBusinessUnitRequest>,
 ) -> Result<Json<entity::business_unit::Model>, AppError> {
+    authz::require_tenant_admin(user)?;
     if req.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".into()));
     }
@@ -91,18 +96,15 @@ pub struct AssignRoleRequest {
     pub role: String,
 }
 
-/// Assigns `role` to `user_id` for this business unit. Not gated by
-/// existing business-unit membership — a brand-new business unit has no
-/// members yet, so someone has to be able to make the first assignment.
-/// Any authenticated tenant user can assign roles for now; there is no
-/// distinct admin/owner role in the catalog to restrict this to (see
-/// .ai/decisions/current/2026-08-28-no-rbac-enforcement-yet.md).
+/// Assigns `role` to `user_id` for this business unit. Tenant-admin only —
+/// see .ai/decisions/current/2026-08-28-tenant-admin-and-platform-manager.md.
 pub async fn assign_role(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(business_unit_id): Path<Uuid>,
     Json(req): Json<AssignRoleRequest>,
 ) -> Result<Json<entity::user_business_unit_role::Model>, AppError> {
+    authz::require_tenant_admin(user)?;
     if !VALID_ROLES.contains(&req.role.as_str()) {
         return Err(AppError::BadRequest(format!(
             "role must be one of {:?}",

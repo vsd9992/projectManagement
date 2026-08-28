@@ -62,7 +62,7 @@ pub async fn create_project(
             |txn| {
                 Box::pin(async move {
                     set_tenant(txn, tenant_id).await?;
-                    authz::require_business_unit_role(txn, user.user_id, business_unit_id, None)
+                    authz::require_business_unit_role(txn, user, business_unit_id, None)
                         .await?;
 
                     let project_am = entity::project::ActiveModel {
@@ -153,7 +153,7 @@ pub async fn get_project(
                     };
                     authz::require_business_unit_role(
                         txn,
-                        user.user_id,
+                        user,
                         project.business_unit_id,
                         None,
                     )
@@ -186,7 +186,7 @@ pub async fn list_projects(
         .transaction::<_, Vec<entity::project::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
-                let bu_ids = authz::accessible_business_units(txn, user.user_id, None).await?;
+                let bu_ids = authz::accessible_business_units(txn, user, None).await?;
                 let items = entity::prelude::Project::find()
                     .filter(entity::project::Column::BusinessUnitId.is_in(bu_ids))
                     .all(txn)

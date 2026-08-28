@@ -41,7 +41,7 @@ pub async fn create_milestone(
         .transaction::<_, entity::milestone::Model, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
-                authz::require_project_business_unit_role(txn, user.user_id, project_id, None)
+                authz::require_project_business_unit_role(txn, user, project_id, None)
                     .await?;
                 let am = entity::milestone::ActiveModel {
                     id: Set(id),
@@ -84,7 +84,7 @@ pub async fn list_milestones(
         .transaction::<_, Vec<entity::milestone::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
-                authz::require_project_business_unit_role(txn, user.user_id, project_id, None)
+                authz::require_project_business_unit_role(txn, user, project_id, None)
                     .await?;
                 let items = entity::prelude::Milestone::find()
                     .filter(entity::milestone::Column::ProjectId.eq(project_id))
@@ -113,7 +113,7 @@ pub async fn complete_milestone(
                     .one(txn)
                     .await?
                     .ok_or(AppError::NotFound)?;
-                authz::require_project_business_unit_role(txn, user.user_id, m.project_id, None)
+                authz::require_project_business_unit_role(txn, user, m.project_id, None)
                     .await?;
                 if m.status == "completed" {
                     return Err(AppError::BadRequest("milestone is already completed".into()));
@@ -183,7 +183,7 @@ pub async fn create_invoice(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("finance"),
                 )
@@ -267,7 +267,7 @@ pub async fn list_invoices(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     project_id,
                     Some("finance"),
                 )
@@ -301,7 +301,7 @@ pub async fn mark_invoice_paid(
                     .ok_or(AppError::NotFound)?;
                 authz::require_project_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     invoice.project_id,
                     Some("finance"),
                 )

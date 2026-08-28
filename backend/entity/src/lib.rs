@@ -10,6 +10,8 @@ pub mod design_revision;
 pub mod invoice;
 pub mod lead;
 pub mod milestone;
+pub mod platform_admin;
+pub mod platform_admin_session;
 pub mod production_task;
 pub mod project;
 pub mod project_workstream;
@@ -41,6 +43,8 @@ pub mod prelude {
     pub use super::invoice::Entity as Invoice;
     pub use super::lead::Entity as Lead;
     pub use super::milestone::Entity as Milestone;
+    pub use super::platform_admin::Entity as PlatformAdmin;
+    pub use super::platform_admin_session::Entity as PlatformAdminSession;
     pub use super::production_task::Entity as ProductionTask;
     pub use super::project::Entity as Project;
     pub use super::project_workstream::Entity as ProjectWorkstream;

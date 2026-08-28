@@ -7,6 +7,7 @@ mod clients;
 pub mod design;
 mod leads;
 mod manufacturing;
+mod platform;
 mod procurement;
 mod projects;
 mod quotations;
@@ -30,6 +31,18 @@ pub fn router() -> Router<AppState> {
         .route(
             "/users/:id/revoke-sessions",
             post(auth::revoke_user_sessions),
+        )
+        .route("/users/:id/admin", post(auth::set_tenant_admin))
+        .route("/platform/auth/login", post(platform::platform_login))
+        .route("/platform/tenants", get(platform::list_tenants))
+        .route("/platform/tenants/:id/pause", post(platform::pause_tenant))
+        .route(
+            "/platform/tenants/:id/resume",
+            post(platform::resume_tenant),
+        )
+        .route(
+            "/platform/tenants/:id/delete",
+            post(platform::delete_tenant),
         )
         .route(
             "/business-units",

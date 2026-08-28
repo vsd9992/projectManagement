@@ -43,7 +43,7 @@ pub async fn create_lead(
                 set_tenant(txn, tenant_id).await?;
                 authz::require_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     business_unit_id,
                     Some("sales_design"),
                 )
@@ -90,7 +90,7 @@ pub async fn list_leads(
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let bu_ids =
-                    authz::accessible_business_units(txn, user.user_id, Some("sales_design"))
+                    authz::accessible_business_units(txn, user, Some("sales_design"))
                         .await?;
                 Ok(entity::prelude::Lead::find()
                     .filter(entity::lead::Column::BusinessUnitId.is_in(bu_ids))
@@ -137,7 +137,7 @@ pub async fn convert_lead(
                 }
                 authz::require_business_unit_role(
                     txn,
-                    user.user_id,
+                    user,
                     lead.business_unit_id,
                     Some("sales_design"),
                 )

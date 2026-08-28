@@ -10,6 +10,13 @@ pub struct Model {
     /// Which regional tax/billing rule profile this tenant uses. Only
     /// "india" is implemented (see api::billing).
     pub region_profile: String,
+    /// One of: "active", "paused", "deleted" (DB CHECK constraint). Managed
+    /// only by platform admins (see routes::platform), never by tenant
+    /// users. Every session lookup checks this and rejects non-active
+    /// tenants.
+    pub status: String,
+    pub paused_at: Option<DateTimeWithTimeZone>,
+    pub deleted_at: Option<DateTimeWithTimeZone>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
