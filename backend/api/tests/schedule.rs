@@ -257,3 +257,129 @@ async fn schedule_task_dependency_cycle_rejected() {
     assert_eq!(listed.status, StatusCode::OK);
     assert_eq!(listed.json.as_array().unwrap().len(), 1);
 }
+
+/// The key "conditional forward-pass, not blind cascade" assertion: A's
+/// actual completion slips 5 days late. B (tightly coupled, no slack)
+/// shifts by the same 5 days. C (depends on B, but with plenty of slack
+/// relative to B's new end date) does NOT shift, and the cascade stops
+/// there rather than propagating further.
+#[tokio::test]
+async fn schedule_task_date_shift_propagates_conditionally_to_dependents() {
+    let (app, _owner, cookie, project_id) = setup_project("schedshift").await;
+
+    async fn make_task(app: &TestApp, cookie: &str, project_id: &str, title: &str) -> String {
+        let t = app
+            .call(
+                "POST",
+                &format!("/projects/{project_id}/schedule-tasks"),
+                Some(cookie),
+                json!({ "title": title, "workstream_type": "site_execution" }),
+            )
+            .await;
+        assert_eq!(t.status, StatusCode::OK, "{:?}", t.json);
+        t.json["id"].as_str().unwrap().to_string()
+    }
+
+    let a = make_task(&app, &cookie, &project_id, "A").await;
+    let b = make_task(&app, &cookie, &project_id, "B").await;
+    let c = make_task(&app, &cookie, &project_id, "C").await;
+
+    // B depends on A, C depends on B.
+    let dep1 = app
+        .call(
+            "POST",
+            &format!("/schedule-tasks/{b}/dependencies"),
+            Some(&cookie),
+            json!({ "depends_on_task_id": a }),
+        )
+        .await;
+    assert_eq!(dep1.status, StatusCode::OK, "{:?}", dep1.json);
+    let dep2 = app
+        .call(
+            "POST",
+            &format!("/schedule-tasks/{c}/dependencies"),
+            Some(&cookie),
+            json!({ "depends_on_task_id": b }),
+        )
+        .await;
+    assert_eq!(dep2.status, StatusCode::OK, "{:?}", dep2.json);
+
+    // Initial plans: A ends right before B starts (no slack); C has 10
+    // days of slack after B's planned end.
+    let set_a = app
+        .call(
+            "POST",
+            &format!("/schedule-tasks/{a}/dates"),
+            Some(&cookie),
+            json!({ "planned_start_date": "2026-09-01", "planned_end_date": "2026-09-05" }),
+        )
+        .await;
+    assert_eq!(set_a.status, StatusCode::OK, "{:?}", set_a.json);
+    assert!(set_a.json["shifted_dependent_task_ids"].as_array().unwrap().is_empty());
+
+    let set_b = app
+        .call(
+            "POST",
+            &format!("/schedule-tasks/{b}/dates"),
+            Some(&cookie),
+            json!({ "planned_start_date": "2026-09-06", "planned_end_date": "2026-09-10" }),
+        )
+        .await;
+    assert_eq!(set_b.status, StatusCode::OK, "{:?}", set_b.json);
+
+    let set_c = app
+        .call(
+            "POST",
+            &format!("/schedule-tasks/{c}/dates"),
+            Some(&cookie),
+            json!({ "planned_start_date": "2026-09-20", "planned_end_date": "2026-09-25" }),
+        )
+        .await;
+    assert_eq!(set_c.status, StatusCode::OK, "{:?}", set_c.json);
+
+    // A actually finishes 5 days late (2026-09-10 instead of 2026-09-05).
+    let slip = app
+        .call(
+            "POST",
+            &format!("/schedule-tasks/{a}/dates"),
+            Some(&cookie),
+            json!({
+                "planned_start_date": "2026-09-01",
+                "planned_end_date": "2026-09-05",
+                "actual_start_date": "2026-09-01",
+                "actual_end_date": "2026-09-10",
+            }),
+        )
+        .await;
+    assert_eq!(slip.status, StatusCode::OK, "{:?}", slip.json);
+    let shifted: Vec<&str> = slip.json["shifted_dependent_task_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    assert_eq!(shifted, vec![b.as_str()], "only B should shift, not C: {:?}", slip.json);
+
+    let b_after = app
+        .call("GET", &format!("/projects/{project_id}/schedule-tasks"), Some(&cookie), json!({}))
+        .await;
+    let b_task = b_after
+        .json
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["id"].as_str().unwrap() == b)
+        .unwrap();
+    assert_eq!(b_task["planned_start_date"], "2026-09-11", "B should shift +5 days: {:?}", b_task);
+    assert_eq!(b_task["planned_end_date"], "2026-09-15");
+
+    let c_task = b_after
+        .json
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["id"].as_str().unwrap() == c)
+        .unwrap();
+    assert_eq!(c_task["planned_start_date"], "2026-09-20", "C has slack and should not shift: {:?}", c_task);
+    assert_eq!(c_task["planned_end_date"], "2026-09-25");
+}

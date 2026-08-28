@@ -2,7 +2,8 @@ use axum::{
     extract::{Path, State},
     Json,
 };
-use chrono::NaiveDate;
+use chrono::{Duration, NaiveDate};
+use std::collections::{HashSet, VecDeque};
 use entity::workstream_type::WorkstreamType;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseTransaction, DbBackend, EntityTrait,
@@ -195,41 +196,59 @@ pub struct UpdateDatesRequest {
     pub actual_end_date: Option<NaiveDate>,
 }
 
+/// A task's "effective end" — its actual completion date if recorded,
+/// otherwise its plan. Comparing this before/after an update is what
+/// decides whether a change is a real schedule slip worth propagating
+/// (moving later), not just an edit that happens to touch the date fields.
+fn effective_end(task: &entity::schedule_task::Model) -> Option<NaiveDate> {
+    task.actual_end_date.or(task.planned_end_date)
+}
+
 /// Full-replace of a schedule task's 4 date fields (no partial-PATCH
-/// semantics — matches this codebase's convention elsewhere). Basic
-/// forward-pass date-shift propagation to dependents happens here in a
-/// later Phase 3 stage; for now this only updates the triggering task.
+/// semantics — matches this codebase's convention elsewhere). If the
+/// task's effective end moved later, triggers basic forward-pass
+/// propagation to dependents (see propagate_shift) and returns which
+/// tasks were shifted, for the caller to notify in a later stage.
+#[derive(serde::Serialize)]
+pub struct UpdateDatesResponse {
+    #[serde(flatten)]
+    pub task: entity::schedule_task::Model,
+    pub shifted_dependent_task_ids: Vec<Uuid>,
+}
+
 pub async fn update_schedule_task_dates(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(task_id): Path<Uuid>,
     Json(req): Json<UpdateDatesRequest>,
-) -> Result<Json<entity::schedule_task::Model>, AppError> {
+) -> Result<Json<UpdateDatesResponse>, AppError> {
     let tenant_id = user.tenant_id;
 
-    let model = state
+    let (task, shifted_dependent_task_ids) = state
         .app_db
-        .transaction::<_, entity::schedule_task::Model, AppError>(|txn| {
+        .transaction::<_, (entity::schedule_task::Model, Vec<Uuid>), AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
-                let task = entity::prelude::ScheduleTask::find_by_id(task_id)
+                let existing = entity::prelude::ScheduleTask::find_by_id(task_id)
                     .one(txn)
                     .await?
                     .ok_or(AppError::NotFound)?;
                 authz::require_project_business_unit_role(
                     txn,
                     user,
-                    task.project_id,
-                    Some(role_for_workstream(&task.workstream_type)),
+                    existing.project_id,
+                    Some(role_for_workstream(&existing.workstream_type)),
                 )
                 .await?;
                 let before = serde_json::json!({
-                    "planned_start_date": task.planned_start_date,
-                    "planned_end_date": task.planned_end_date,
-                    "actual_start_date": task.actual_start_date,
-                    "actual_end_date": task.actual_end_date,
+                    "planned_start_date": existing.planned_start_date,
+                    "planned_end_date": existing.planned_end_date,
+                    "actual_start_date": existing.actual_start_date,
+                    "actual_end_date": existing.actual_end_date,
                 });
-                let mut am: entity::schedule_task::ActiveModel = task.into();
+                let old_effective_end = effective_end(&existing);
+
+                let mut am: entity::schedule_task::ActiveModel = existing.into();
                 am.planned_start_date = Set(req.planned_start_date);
                 am.planned_end_date = Set(req.planned_end_date);
                 am.actual_start_date = Set(req.actual_start_date);
@@ -251,12 +270,112 @@ pub async fn update_schedule_task_dates(
                     })),
                 )
                 .await?;
-                Ok(updated)
+
+                let new_effective_end = effective_end(&updated);
+                let mut shifted = Vec::new();
+                if let (Some(old_end), Some(new_end)) = (old_effective_end, new_effective_end) {
+                    if new_end > old_end {
+                        let delta_days = (new_end - old_end).num_days();
+                        shifted =
+                            propagate_shift(txn, tenant_id, user.user_id, task_id, delta_days)
+                                .await?;
+                    }
+                }
+
+                Ok((updated, shifted))
             })
         })
         .await
         .map_err(map_txn_err)?;
-    Ok(Json(model))
+    Ok(Json(UpdateDatesResponse { task, shifted_dependent_task_ids }))
+}
+
+/// Basic forward-pass propagation (explicitly not full CPM/critical-path —
+/// see .ai/decisions/current/2026-08-28-phase-3-audit-and-expansion.md): a
+/// BFS from `root_id` over direct dependents at each level. A dependent
+/// shifts (by the same fixed `delta_days` throughout the cascade) only if
+/// its planned start can no longer follow its precedent's new effective
+/// end — if it already had enough slack, it absorbs the delta and the
+/// cascade stops there, rather than propagating further through it. Cycle
+/// detection at edge-insert time already guarantees the dependency graph
+/// is a DAG, so `visited` here is purely to avoid double-shifting a shared
+/// descendant in a diamond-shaped graph, not to prevent infinite loops.
+async fn propagate_shift(
+    txn: &DatabaseTransaction,
+    tenant_id: Uuid,
+    user_id: Uuid,
+    root_id: Uuid,
+    delta_days: i64,
+) -> Result<Vec<Uuid>, AppError> {
+    let mut shifted_ids = Vec::new();
+    let mut visited: HashSet<Uuid> = HashSet::new();
+    visited.insert(root_id);
+    let mut queue: VecDeque<Uuid> = VecDeque::new();
+    queue.push_back(root_id);
+
+    while let Some(precedent_id) = queue.pop_front() {
+        let precedent = entity::prelude::ScheduleTask::find_by_id(precedent_id)
+            .one(txn)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        let Some(precedent_end) = effective_end(&precedent) else {
+            continue;
+        };
+
+        let edges = entity::prelude::ScheduleTaskDependency::find()
+            .filter(entity::schedule_task_dependency::Column::DependsOnTaskId.eq(precedent_id))
+            .all(txn)
+            .await?;
+
+        for edge in edges {
+            let dep_id = edge.task_id;
+            if visited.contains(&dep_id) {
+                continue;
+            }
+            visited.insert(dep_id);
+
+            let dep_task = entity::prelude::ScheduleTask::find_by_id(dep_id)
+                .one(txn)
+                .await?
+                .ok_or(AppError::NotFound)?;
+
+            let needs_shift = matches!(dep_task.planned_start_date, Some(start) if start < precedent_end);
+            if !needs_shift {
+                continue;
+            }
+
+            let before = serde_json::json!({
+                "planned_start_date": dep_task.planned_start_date,
+                "planned_end_date": dep_task.planned_end_date,
+            });
+            let new_start = dep_task.planned_start_date.map(|d| d + Duration::days(delta_days));
+            let new_end = dep_task.planned_end_date.map(|d| d + Duration::days(delta_days));
+            let mut am: entity::schedule_task::ActiveModel = dep_task.into();
+            am.planned_start_date = Set(new_start);
+            am.planned_end_date = Set(new_end);
+            am.update(txn).await?;
+            audit::record(
+                txn,
+                tenant_id,
+                "schedule_task",
+                dep_id,
+                "update",
+                audit::Actor::User(user_id),
+                Some(before),
+                Some(serde_json::json!({
+                    "planned_start_date": new_start,
+                    "planned_end_date": new_end,
+                    "shifted_due_to_precedent": precedent_id,
+                })),
+            )
+            .await?;
+
+            shifted_ids.push(dep_id);
+            queue.push_back(dep_id);
+        }
+    }
+
+    Ok(shifted_ids)
 }
 
 /// Whether adding an edge `task_id -> depends_on_task_id` would close a
