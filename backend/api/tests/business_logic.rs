@@ -246,7 +246,7 @@ async fn design_revision_lifecycle_submit_approve_reject() {
 }
 
 #[tokio::test]
-async fn purchase_order_lifecycle_create_and_deliver() {
+async fn purchase_order_lifecycle_create_approve_deliver() {
     let (app, _owner, cookie, project_id) = setup_project("potest").await;
 
     let vendor = app
@@ -268,9 +268,25 @@ async fn purchase_order_lifecycle_create_and_deliver() {
         )
         .await;
     assert_eq!(po.status, StatusCode::OK, "{:?}", po.json);
-    assert_eq!(po.json["status"], "open");
+    assert_eq!(po.json["status"], "pending_approval");
     assert_eq!(po.json["line_items"][0]["amount"], "15000.00");
     let po_id = po.json["id"].as_str().unwrap().to_string();
+
+    let deliver_before_approval = app
+        .call("POST", &format!("/purchase-orders/{po_id}/deliver"), Some(&cookie), json!({}))
+        .await;
+    assert_eq!(
+        deliver_before_approval.status,
+        StatusCode::BAD_REQUEST,
+        "delivery before approval should be rejected: {:?}",
+        deliver_before_approval.json
+    );
+
+    let approved = app
+        .call("POST", &format!("/purchase-orders/{po_id}/approve"), Some(&cookie), json!({}))
+        .await;
+    assert_eq!(approved.status, StatusCode::OK, "{:?}", approved.json);
+    assert_eq!(approved.json["status"], "open");
 
     let delivered = app
         .call("POST", &format!("/purchase-orders/{po_id}/deliver"), Some(&cookie), json!({}))
@@ -282,6 +298,55 @@ async fn purchase_order_lifecycle_create_and_deliver() {
         .call("POST", &format!("/purchase-orders/{po_id}/deliver"), Some(&cookie), json!({}))
         .await;
     assert_eq!(redeliver.status, StatusCode::BAD_REQUEST, "{:?}", redeliver.json);
+}
+
+#[tokio::test]
+async fn purchase_order_rejection_is_terminal() {
+    let (app, _owner, cookie, project_id) = setup_project("porejecttest").await;
+    let vendor = app
+        .call("POST", "/vendors", Some(&cookie), json!({ "name": "Test Vendor" }))
+        .await;
+    let vendor_id = vendor.json["id"].as_str().unwrap().to_string();
+    let po = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/purchase-orders"),
+            Some(&cookie),
+            json!({
+                "vendor_id": vendor_id,
+                "title": "Materials",
+                "line_items": [{ "description": "Plywood", "quantity": "10", "unit": "sheet", "unit_rate": "1500" }],
+            }),
+        )
+        .await;
+    let po_id = po.json["id"].as_str().unwrap().to_string();
+
+    let rejected = app
+        .call(
+            "POST",
+            &format!("/purchase-orders/{po_id}/reject"),
+            Some(&cookie),
+            json!({ "notes": "wrong vendor" }),
+        )
+        .await;
+    assert_eq!(rejected.status, StatusCode::OK, "{:?}", rejected.json);
+    assert_eq!(rejected.json["status"], "rejected");
+    assert_eq!(rejected.json["decision_notes"], "wrong vendor");
+
+    let approve_after_reject = app
+        .call("POST", &format!("/purchase-orders/{po_id}/approve"), Some(&cookie), json!({}))
+        .await;
+    assert_eq!(
+        approve_after_reject.status,
+        StatusCode::BAD_REQUEST,
+        "a rejected PO should not be approvable afterward: {:?}",
+        approve_after_reject.json
+    );
+
+    let deliver_after_reject = app
+        .call("POST", &format!("/purchase-orders/{po_id}/deliver"), Some(&cookie), json!({}))
+        .await;
+    assert_eq!(deliver_after_reject.status, StatusCode::BAD_REQUEST, "{:?}", deliver_after_reject.json);
 }
 
 #[tokio::test]

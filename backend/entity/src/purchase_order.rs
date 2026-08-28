@@ -9,11 +9,17 @@ pub struct Model {
     pub project_id: Uuid,
     pub vendor_id: Uuid,
     pub title: String,
-    /// One of: "open", "delivered" (DB CHECK constraint).
+    /// One of: "pending_approval", "open", "delivered", "rejected" (DB
+    /// CHECK constraint). Created as "pending_approval"; an internal
+    /// approve/reject decision moves it to "open"/"rejected" before
+    /// delivery can be recorded.
     pub status: String,
     pub created_by: Uuid,
     pub created_at: DateTimeWithTimeZone,
     pub delivered_at: Option<DateTimeWithTimeZone>,
+    pub decided_by: Option<Uuid>,
+    pub decided_at: Option<DateTimeWithTimeZone>,
+    pub decision_notes: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

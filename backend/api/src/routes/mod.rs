@@ -139,6 +139,14 @@ pub fn router() -> Router<AppState> {
             "/purchase-orders/:id/deliver",
             post(procurement::mark_purchase_order_delivered),
         )
+        .route(
+            "/purchase-orders/:id/approve",
+            post(procurement::approve_purchase_order),
+        )
+        .route(
+            "/purchase-orders/:id/reject",
+            post(procurement::reject_purchase_order),
+        )
         // Manufacturing (simplified "production task" depth for MVP).
         .route(
             "/projects/:project_id/production-tasks",

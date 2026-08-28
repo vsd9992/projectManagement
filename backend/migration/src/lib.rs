@@ -12,6 +12,7 @@ mod m20260828_000009_invoice_milestone_uniqueness;
 mod m20260828_000010_add_progressive_billing;
 mod m20260828_000011_add_schedule_tasks;
 mod m20260828_000012_add_notifications;
+mod m20260828_000013_add_po_approval;
 
 pub struct Migrator;
 
@@ -31,6 +32,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260828_000010_add_progressive_billing::Migration),
             Box::new(m20260828_000011_add_schedule_tasks::Migration),
             Box::new(m20260828_000012_add_notifications::Migration),
+            Box::new(m20260828_000013_add_po_approval::Migration),
         ]
     }
 }

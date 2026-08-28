@@ -159,10 +159,13 @@ pub async fn create_purchase_order(
                     project_id: Set(project_id),
                     vendor_id: Set(vendor_id),
                     title: Set(title.clone()),
-                    status: Set("open".to_string()),
+                    status: Set("pending_approval".to_string()),
                     created_by: Set(user.user_id),
                     created_at: Set(chrono::Utc::now().into()),
                     delivered_at: Set(None),
+                    decided_by: Set(None),
+                    decided_at: Set(None),
+                    decision_notes: Set(None),
                 };
                 let purchase_order = po_am.insert(txn).await?;
                 audit::record(
@@ -248,6 +251,93 @@ pub async fn list_purchase_orders(
         .await
         .map_err(map_txn_err)?;
     Ok(Json(items))
+}
+
+#[derive(Deserialize)]
+pub struct PoDecisionRequest {
+    pub notes: Option<String>,
+}
+
+async fn decide_purchase_order(
+    state: &AppState,
+    user: AuthenticatedUser,
+    po_id: Uuid,
+    approve: bool,
+    notes: Option<String>,
+) -> Result<entity::purchase_order::Model, AppError> {
+    let tenant_id = user.tenant_id;
+    state
+        .app_db
+        .transaction::<_, entity::purchase_order::Model, AppError>(|txn| {
+            Box::pin(async move {
+                set_tenant(txn, tenant_id).await?;
+                let po = entity::prelude::PurchaseOrder::find_by_id(po_id)
+                    .one(txn)
+                    .await?
+                    .ok_or(AppError::NotFound)?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user,
+                    po.project_id,
+                    Some("delivery"),
+                )
+                .await?;
+                if po.status != "pending_approval" {
+                    return Err(AppError::BadRequest(format!(
+                        "purchase order is already {}",
+                        po.status
+                    )));
+                }
+                let before = serde_json::json!({ "status": po.status });
+                let new_status = if approve { "open" } else { "rejected" };
+                let mut am: entity::purchase_order::ActiveModel = po.into();
+                am.status = Set(new_status.to_string());
+                am.decided_by = Set(Some(user.user_id));
+                am.decided_at = Set(Some(chrono::Utc::now().into()));
+                am.decision_notes = Set(notes.clone());
+                let updated = am.update(txn).await?;
+                audit::record(
+                    txn,
+                    tenant_id,
+                    "purchase_order",
+                    po_id,
+                    "update",
+                    audit::Actor::User(user.user_id),
+                    Some(before),
+                    Some(serde_json::json!({ "status": new_status, "notes": notes })),
+                )
+                .await?;
+                Ok(updated)
+            })
+        })
+        .await
+        .map_err(map_txn_err)
+}
+
+/// Internal approval step before a PO is sent to a vendor — closes the
+/// gap `architecture.md` listing POs in the approval chain even though no
+/// approval step existed. No distinct "approver" role exists in the
+/// current catalog, so this is gated by the same `delivery` role that
+/// creates a PO — matching how this app doesn't otherwise separate
+/// creator/approver roles anywhere internal.
+pub async fn approve_purchase_order(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path(po_id): Path<Uuid>,
+    Json(req): Json<PoDecisionRequest>,
+) -> Result<Json<entity::purchase_order::Model>, AppError> {
+    let model = decide_purchase_order(&state, user, po_id, true, req.notes).await?;
+    Ok(Json(model))
+}
+
+pub async fn reject_purchase_order(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path(po_id): Path<Uuid>,
+    Json(req): Json<PoDecisionRequest>,
+) -> Result<Json<entity::purchase_order::Model>, AppError> {
+    let model = decide_purchase_order(&state, user, po_id, false, req.notes).await?;
+    Ok(Json(model))
 }
 
 pub async fn mark_purchase_order_delivered(
