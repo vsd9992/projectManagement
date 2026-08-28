@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::{
     audit,
     auth::session::AuthenticatedUser,
+    authz,
     db::set_tenant,
     error::{map_txn_err, AppError},
     state::AppState,
@@ -132,6 +133,13 @@ pub async fn create_purchase_order(
         .transaction::<_, (entity::purchase_order::Model, Vec<entity::purchase_order_line_item::Model>), AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("delivery"),
+                )
+                .await?;
 
                 if entity::prelude::Vendor::find_by_id(vendor_id).one(txn).await?.is_none() {
                     return Err(AppError::BadRequest("vendor_id not found".into()));
@@ -215,6 +223,13 @@ pub async fn list_purchase_orders(
         .transaction::<_, Vec<entity::purchase_order::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("delivery"),
+                )
+                .await?;
                 let items = entity::prelude::PurchaseOrder::find()
                     .filter(entity::purchase_order::Column::ProjectId.eq(project_id))
                     .all(txn)
@@ -242,6 +257,13 @@ pub async fn mark_purchase_order_delivered(
                     .one(txn)
                     .await?
                     .ok_or(AppError::NotFound)?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    po.project_id,
+                    Some("delivery"),
+                )
+                .await?;
                 if po.status != "open" {
                     return Err(AppError::BadRequest(format!(
                         "purchase order is already {}",

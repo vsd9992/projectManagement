@@ -39,4 +39,12 @@ BASELINE (change only on an approved decision; update the `modified:` date on ed
 - Verification: task-level verification lives in the task file; milestone-level lives in `roadmap.md`; phase/release-level gets its own file in `.ai/verification/` only when it has genuine lasting value. Never mark something verified without actual supporting checks.
 
 ## Canonical commands
-_Stack decided (Rust/Axum/SeaORM+SQLx/PostgreSQL backend, React/TypeScript frontend — see `.ai/decisions/current/2026-08-27-technology-stack-backend-frontend.md`), but the repository has not been scaffolded yet. Fill in real install/build/test/lint/dev commands here once the scaffold exists — do not guess them._
+Backend lives in `backend/` (Cargo workspace: `migration`, `entity`, `api`). Postgres is not available locally in this dev environment — build/compile checks run locally, but running the server, migrations, or tests requires the dev server (`devMachine` over SSH; see `.ai/decisions/current/2026-08-27-hosting-dev-local-prod-kubernetes.md`).
+
+- Build (works locally): `cd backend && cargo build --workspace`
+- Run migrations (on devMachine, `DATABASE_URL` = the `app_migrator` superuser connection string from `.env`): `cargo run --bin migration -- up`
+- Run the server (on devMachine): `cargo run --bin api` (reads `DATABASE_URL_APP`/`DATABASE_URL_ADMIN`/`BIND_ADDR` from `.env`)
+- Run tests (on devMachine, against the dedicated `project_management_test` database — never the dev fixture data in `project_management`): `TEST_DATABASE_URL_APP=... TEST_DATABASE_URL_ADMIN=... cargo test -p api`
+- After any migration change: re-run `GRANT ALL ON ALL TABLES/SEQUENCES IN SCHEMA public TO app_user, app_admin;` (see `backend/scripts/setup_roles.sql`) — new tables aren't visible to the app roles until granted.
+
+No frontend scaffold yet.

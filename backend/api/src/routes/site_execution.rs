@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::{
     audit,
     auth::session::AuthenticatedUser,
+    authz,
     db::set_tenant,
     error::{map_txn_err, AppError},
     state::AppState,
@@ -41,6 +42,13 @@ pub async fn create_site_task(
         .transaction::<_, entity::site_task::Model, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("delivery"),
+                )
+                .await?;
                 let am = entity::site_task::ActiveModel {
                     id: Set(id),
                     tenant_id: Set(tenant_id),
@@ -81,6 +89,13 @@ pub async fn list_site_tasks(
         .transaction::<_, Vec<entity::site_task::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("delivery"),
+                )
+                .await?;
                 let items = entity::prelude::SiteTask::find()
                     .filter(entity::site_task::Column::ProjectId.eq(project_id))
                     .all(txn)
@@ -122,6 +137,13 @@ pub async fn update_site_task_status(
                     .one(txn)
                     .await?
                     .ok_or(AppError::NotFound)?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    task.project_id,
+                    Some("delivery"),
+                )
+                .await?;
                 let before = serde_json::json!({ "status": task.status });
                 let mut am: entity::site_task::ActiveModel = task.into();
                 am.status = Set(new_status.clone());
@@ -187,6 +209,13 @@ pub async fn add_site_task_dependency(
                         "both tasks must belong to the same project".into(),
                     ));
                 }
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    task.project_id,
+                    Some("delivery"),
+                )
+                .await?;
 
                 let am = entity::site_task_dependency::ActiveModel {
                     tenant_id: Set(tenant_id),
@@ -225,6 +254,17 @@ pub async fn list_site_task_dependencies(
         .transaction::<_, Vec<entity::site_task_dependency::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                let task = entity::prelude::SiteTask::find_by_id(task_id)
+                    .one(txn)
+                    .await?
+                    .ok_or(AppError::NotFound)?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    task.project_id,
+                    Some("delivery"),
+                )
+                .await?;
                 let items = entity::prelude::SiteTaskDependency::find()
                     .filter(entity::site_task_dependency::Column::TaskId.eq(task_id))
                     .all(txn)
@@ -263,6 +303,13 @@ pub async fn create_daily_log(
         .transaction::<_, entity::daily_log::Model, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("delivery"),
+                )
+                .await?;
                 let am = entity::daily_log::ActiveModel {
                     id: Set(id),
                     tenant_id: Set(tenant_id),
@@ -303,6 +350,13 @@ pub async fn list_daily_logs(
         .transaction::<_, Vec<entity::daily_log::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("delivery"),
+                )
+                .await?;
                 let items = entity::prelude::DailyLog::find()
                     .filter(entity::daily_log::Column::ProjectId.eq(project_id))
                     .all(txn)
@@ -340,6 +394,13 @@ pub async fn create_punch_list_item(
         .transaction::<_, entity::punch_list_item::Model, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("delivery"),
+                )
+                .await?;
                 let am = entity::punch_list_item::ActiveModel {
                     id: Set(id),
                     tenant_id: Set(tenant_id),
@@ -382,6 +443,13 @@ pub async fn list_punch_list_items(
         .transaction::<_, Vec<entity::punch_list_item::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("delivery"),
+                )
+                .await?;
                 let items = entity::prelude::PunchListItem::find()
                     .filter(entity::punch_list_item::Column::ProjectId.eq(project_id))
                     .all(txn)
@@ -409,6 +477,13 @@ pub async fn close_punch_list_item(
                     .one(txn)
                     .await?
                     .ok_or(AppError::NotFound)?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    item.project_id,
+                    Some("delivery"),
+                )
+                .await?;
                 if item.status == "closed" {
                     return Err(AppError::BadRequest("punch list item is already closed".into()));
                 }
@@ -463,6 +538,13 @@ pub async fn create_site_query(
         .transaction::<_, entity::site_query::Model, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("delivery"),
+                )
+                .await?;
                 let am = entity::site_query::ActiveModel {
                     id: Set(id),
                     tenant_id: Set(tenant_id),
@@ -507,6 +589,13 @@ pub async fn list_site_queries(
         .transaction::<_, Vec<entity::site_query::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("delivery"),
+                )
+                .await?;
                 let items = entity::prelude::SiteQuery::find()
                     .filter(entity::site_query::Column::ProjectId.eq(project_id))
                     .all(txn)
@@ -545,6 +634,13 @@ pub async fn answer_site_query(
                     .one(txn)
                     .await?
                     .ok_or(AppError::NotFound)?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    query.project_id,
+                    Some("delivery"),
+                )
+                .await?;
                 if query.status == "answered" {
                     return Err(AppError::BadRequest("site query is already answered".into()));
                 }

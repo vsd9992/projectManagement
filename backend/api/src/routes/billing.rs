@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::{
     audit,
     auth::session::AuthenticatedUser,
-    billing,
+    authz, billing,
     db::set_tenant,
     error::{map_txn_err, AppError},
     state::AppState,
@@ -41,6 +41,8 @@ pub async fn create_milestone(
         .transaction::<_, entity::milestone::Model, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(txn, user.user_id, project_id, None)
+                    .await?;
                 let am = entity::milestone::ActiveModel {
                     id: Set(id),
                     tenant_id: Set(tenant_id),
@@ -82,6 +84,8 @@ pub async fn list_milestones(
         .transaction::<_, Vec<entity::milestone::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(txn, user.user_id, project_id, None)
+                    .await?;
                 let items = entity::prelude::Milestone::find()
                     .filter(entity::milestone::Column::ProjectId.eq(project_id))
                     .all(txn)
@@ -109,6 +113,8 @@ pub async fn complete_milestone(
                     .one(txn)
                     .await?
                     .ok_or(AppError::NotFound)?;
+                authz::require_project_business_unit_role(txn, user.user_id, m.project_id, None)
+                    .await?;
                 if m.status == "completed" {
                     return Err(AppError::BadRequest("milestone is already completed".into()));
                 }
@@ -175,6 +181,13 @@ pub async fn create_invoice(
         .transaction::<_, entity::invoice::Model, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("finance"),
+                )
+                .await?;
 
                 let milestone = entity::prelude::Milestone::find_by_id(milestone_id)
                     .one(txn)
@@ -252,6 +265,13 @@ pub async fn list_invoices(
         .transaction::<_, Vec<entity::invoice::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("finance"),
+                )
+                .await?;
                 let items = entity::prelude::Invoice::find()
                     .filter(entity::invoice::Column::ProjectId.eq(project_id))
                     .all(txn)
@@ -279,6 +299,13 @@ pub async fn mark_invoice_paid(
                     .one(txn)
                     .await?
                     .ok_or(AppError::NotFound)?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    invoice.project_id,
+                    Some("finance"),
+                )
+                .await?;
                 if invoice.status == "paid" {
                     return Err(AppError::BadRequest("invoice is already paid".into()));
                 }

@@ -1,3 +1,5 @@
+> **Superseded 2026-08-28** by `.ai/decisions/current/2026-08-28-rbac-business-unit-scoping-implemented.md` — kept for the historical record of why the gap existed and was accepted temporarily.
+
 # Decision: "Role" in requirements.md describes capability scope, not enforced access control — no RBAC yet
 
 **Decision**: Through M1–M5, `user_business_unit_role` rows exist (a user can be assigned "sales_design", "delivery", or "finance" for a business unit) but nothing checks them. Every internal-facing endpoint is gated only by "is this an authenticated tenant user" (`AuthenticatedUser`), not by which role that user holds. This applies uniformly — Sales & Design, Delivery, and Finance actions are all equally unenforced.

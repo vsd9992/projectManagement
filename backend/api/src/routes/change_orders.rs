@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::{
     audit,
     auth::session::AuthenticatedUser,
+    authz,
     db::set_tenant,
     error::{map_txn_err, AppError},
     state::AppState,
@@ -72,6 +73,13 @@ pub async fn create_change_order(
         .transaction::<_, (entity::change_order::Model, Vec<entity::change_order_line_item::Model>), AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("sales_design"),
+                )
+                .await?;
 
                 let base_quotation = entity::prelude::Quotation::find_by_id(base_quotation_id)
                     .one(txn)
@@ -203,6 +211,13 @@ pub async fn list_change_orders(
         .transaction::<_, Vec<entity::change_order::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("sales_design"),
+                )
+                .await?;
                 let items = entity::prelude::ChangeOrder::find()
                     .filter(entity::change_order::Column::ProjectId.eq(project_id))
                     .all(txn)
@@ -229,6 +244,13 @@ pub async fn get_change_order(
                 let Some(change_order) = entity::prelude::ChangeOrder::find_by_id(change_order_id).one(txn).await? else {
                     return Ok(None);
                 };
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    change_order.project_id,
+                    Some("sales_design"),
+                )
+                .await?;
                 let line_items = entity::prelude::ChangeOrderLineItem::find()
                     .filter(entity::change_order_line_item::Column::ChangeOrderId.eq(change_order_id))
                     .all(txn)

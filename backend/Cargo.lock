@@ -111,6 +111,7 @@ dependencies = [
  "dotenvy",
  "entity",
  "hex",
+ "http-body-util",
  "rand",
  "rust_decimal",
  "sea-orm",

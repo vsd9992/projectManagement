@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::{
     audit,
     auth::session::AuthenticatedUser,
+    authz,
     db::set_tenant,
     error::{map_txn_err, AppError},
     state::AppState,
@@ -39,6 +40,13 @@ pub async fn create_production_task(
         .transaction::<_, entity::production_task::Model, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("delivery"),
+                )
+                .await?;
                 let am = entity::production_task::ActiveModel {
                     id: Set(id),
                     tenant_id: Set(tenant_id),
@@ -79,6 +87,13 @@ pub async fn list_production_tasks(
         .transaction::<_, Vec<entity::production_task::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("delivery"),
+                )
+                .await?;
                 let items = entity::prelude::ProductionTask::find()
                     .filter(entity::production_task::Column::ProjectId.eq(project_id))
                     .all(txn)
@@ -120,6 +135,13 @@ pub async fn update_production_task_status(
                     .one(txn)
                     .await?
                     .ok_or(AppError::NotFound)?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    task.project_id,
+                    Some("delivery"),
+                )
+                .await?;
                 let before = serde_json::json!({ "status": task.status });
                 let mut am: entity::production_task::ActiveModel = task.into();
                 am.status = Set(new_status.clone());

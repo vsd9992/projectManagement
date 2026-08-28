@@ -1,18 +1,7 @@
-mod audit;
-mod auth;
-mod billing;
-mod config;
-mod db;
-mod error;
-mod routes;
-mod state;
-
 use sea_orm::Database;
-use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
-use config::AppConfig;
-use state::AppState;
+use api::{build_app, config::AppConfig, state::AppState};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -28,9 +17,7 @@ async fn main() -> anyhow::Result<()> {
     let admin_db = Database::connect(&config.database_url_admin).await?;
     let state = AppState { app_db, admin_db };
 
-    let app = routes::router()
-        .with_state(state)
-        .layer(TraceLayer::new_for_http());
+    let app = build_app(state);
 
     let listener = tokio::net::TcpListener::bind(&config.bind_addr).await?;
     tracing::info!(addr = %config.bind_addr, "listening");

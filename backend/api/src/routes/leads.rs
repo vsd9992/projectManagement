@@ -2,13 +2,14 @@ use axum::{
     extract::{Path, State},
     Json,
 };
-use sea_orm::{ActiveModelTrait, EntityTrait, Set, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
     audit,
     auth::session::AuthenticatedUser,
+    authz,
     db::set_tenant,
     error::{map_txn_err, AppError},
     state::AppState,
@@ -40,6 +41,13 @@ pub async fn create_lead(
         .transaction::<_, entity::lead::Model, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_business_unit_role(
+                    txn,
+                    user.user_id,
+                    business_unit_id,
+                    Some("sales_design"),
+                )
+                .await?;
                 let am = entity::lead::ActiveModel {
                     id: Set(id),
                     tenant_id: Set(tenant_id),
@@ -81,7 +89,13 @@ pub async fn list_leads(
         .transaction::<_, Vec<entity::lead::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
-                Ok(entity::prelude::Lead::find().all(txn).await?)
+                let bu_ids =
+                    authz::accessible_business_units(txn, user.user_id, Some("sales_design"))
+                        .await?;
+                Ok(entity::prelude::Lead::find()
+                    .filter(entity::lead::Column::BusinessUnitId.is_in(bu_ids))
+                    .all(txn)
+                    .await?)
             })
         })
         .await
@@ -121,6 +135,13 @@ pub async fn convert_lead(
                 if lead.status == "converted" {
                     return Err(AppError::BadRequest("lead is already converted".into()));
                 }
+                authz::require_business_unit_role(
+                    txn,
+                    user.user_id,
+                    lead.business_unit_id,
+                    Some("sales_design"),
+                )
+                .await?;
 
                 let project_id = Uuid::new_v4();
                 let project_am = entity::project::ActiveModel {

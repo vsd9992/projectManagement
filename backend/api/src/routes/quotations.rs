@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::{
     audit,
     auth::session::AuthenticatedUser,
+    authz,
     db::set_tenant,
     error::{map_txn_err, AppError},
     state::AppState,
@@ -57,10 +58,13 @@ pub async fn create_quotation(
         .transaction::<_, (entity::quotation::Model, Vec<entity::quotation_line_item::Model>), AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
-
-                if entity::prelude::Project::find_by_id(project_id).one(txn).await?.is_none() {
-                    return Err(AppError::NotFound);
-                }
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("sales_design"),
+                )
+                .await?;
 
                 let next_version = entity::prelude::Quotation::find()
                     .filter(entity::quotation::Column::ProjectId.eq(project_id))
@@ -145,6 +149,13 @@ pub async fn list_quotations(
         .transaction::<_, Vec<entity::quotation::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("sales_design"),
+                )
+                .await?;
                 let items = entity::prelude::Quotation::find()
                     .filter(entity::quotation::Column::ProjectId.eq(project_id))
                     .order_by_desc(entity::quotation::Column::Version)
@@ -172,6 +183,13 @@ pub async fn get_quotation(
                 let Some(quotation) = entity::prelude::Quotation::find_by_id(quotation_id).one(txn).await? else {
                     return Ok(None);
                 };
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    quotation.project_id,
+                    Some("sales_design"),
+                )
+                .await?;
                 let line_items = entity::prelude::QuotationLineItem::find()
                     .filter(entity::quotation_line_item::Column::QuotationId.eq(quotation_id))
                     .all(txn)

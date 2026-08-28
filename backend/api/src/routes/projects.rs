@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::{
     audit,
     auth::session::AuthenticatedUser,
+    authz,
     db::set_tenant,
     error::{map_txn_err, AppError},
     state::AppState,
@@ -61,6 +62,8 @@ pub async fn create_project(
             |txn| {
                 Box::pin(async move {
                     set_tenant(txn, tenant_id).await?;
+                    authz::require_business_unit_role(txn, user.user_id, business_unit_id, None)
+                        .await?;
 
                     let project_am = entity::project::ActiveModel {
                         id: Set(project_id),
@@ -148,6 +151,13 @@ pub async fn get_project(
                     let Some(project) = project else {
                         return Ok(None);
                     };
+                    authz::require_business_unit_role(
+                        txn,
+                        user.user_id,
+                        project.business_unit_id,
+                        None,
+                    )
+                    .await?;
                     let workstreams = entity::prelude::ProjectWorkstream::find()
                         .filter(entity::project_workstream::Column::ProjectId.eq(project_id))
                         .all(txn)
@@ -176,7 +186,11 @@ pub async fn list_projects(
         .transaction::<_, Vec<entity::project::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
-                let items = entity::prelude::Project::find().all(txn).await?;
+                let bu_ids = authz::accessible_business_units(txn, user.user_id, None).await?;
+                let items = entity::prelude::Project::find()
+                    .filter(entity::project::Column::BusinessUnitId.is_in(bu_ids))
+                    .all(txn)
+                    .await?;
                 Ok(items)
             })
         })

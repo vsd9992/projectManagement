@@ -26,9 +26,18 @@ pub fn router() -> Router<AppState> {
         .route("/auth/login", post(auth::login))
         .route("/auth/client-login", post(auth::client_login))
         .route("/auth/logout", post(auth::logout))
+        .route("/users", post(auth::create_teammate))
+        .route(
+            "/users/:id/revoke-sessions",
+            post(auth::revoke_user_sessions),
+        )
         .route(
             "/business-units",
             get(business_units::list_business_units).post(business_units::create_business_unit),
+        )
+        .route(
+            "/business-units/:id/roles",
+            get(business_units::list_roles).post(business_units::assign_role),
         )
         .route(
             "/clients",

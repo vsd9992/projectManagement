@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::{
     audit,
     auth::session::AuthenticatedUser,
+    authz,
     db::set_tenant,
     error::{map_txn_err, AppError},
     state::AppState,
@@ -37,9 +38,13 @@ pub async fn create_design_asset(
         .transaction::<_, entity::design_asset::Model, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
-                if entity::prelude::Project::find_by_id(project_id).one(txn).await?.is_none() {
-                    return Err(AppError::NotFound);
-                }
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("sales_design"),
+                )
+                .await?;
                 let am = entity::design_asset::ActiveModel {
                     id: Set(id),
                     tenant_id: Set(tenant_id),
@@ -79,6 +84,13 @@ pub async fn list_design_assets(
         .transaction::<_, Vec<entity::design_asset::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    project_id,
+                    Some("sales_design"),
+                )
+                .await?;
                 let items = entity::prelude::DesignAsset::find()
                     .filter(entity::design_asset::Column::ProjectId.eq(project_id))
                     .all(txn)
@@ -114,9 +126,17 @@ pub async fn submit_design_revision(
         .transaction::<_, entity::design_revision::Model, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
-                if entity::prelude::DesignAsset::find_by_id(design_asset_id).one(txn).await?.is_none() {
-                    return Err(AppError::NotFound);
-                }
+                let asset = entity::prelude::DesignAsset::find_by_id(design_asset_id)
+                    .one(txn)
+                    .await?
+                    .ok_or(AppError::NotFound)?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    asset.project_id,
+                    Some("sales_design"),
+                )
+                .await?;
 
                 let next_version = entity::prelude::DesignRevision::find()
                     .filter(entity::design_revision::Column::DesignAssetId.eq(design_asset_id))
@@ -171,6 +191,17 @@ pub async fn list_design_revisions(
         .transaction::<_, Vec<entity::design_revision::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                let asset = entity::prelude::DesignAsset::find_by_id(design_asset_id)
+                    .one(txn)
+                    .await?
+                    .ok_or(AppError::NotFound)?;
+                authz::require_project_business_unit_role(
+                    txn,
+                    user.user_id,
+                    asset.project_id,
+                    Some("sales_design"),
+                )
+                .await?;
                 let items = entity::prelude::DesignRevision::find()
                     .filter(entity::design_revision::Column::DesignAssetId.eq(design_asset_id))
                     .order_by_asc(entity::design_revision::Column::Version)

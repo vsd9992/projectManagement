@@ -1,4 +1,8 @@
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    Json,
+};
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
 use serde::{Deserialize, Serialize};
@@ -6,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     audit,
-    auth::{password, session},
+    auth::{password, session, session::AuthenticatedUser},
     db::set_tenant,
     error::{map_txn_err, AppError},
     state::AppState,
@@ -157,6 +161,84 @@ pub async fn login(
     Ok(jar.add(session_cookie(token)))
 }
 
+#[derive(Deserialize)]
+pub struct CreateTeammateRequest {
+    pub email: String,
+    pub password: String,
+}
+
+/// Creates a second internal user within the caller's own tenant — the
+/// missing piece that made "multiple branches, separate teams" impossible
+/// to actually exercise: signup always creates a brand-new tenant, so
+/// without this a tenant could only ever have one internal user. Any
+/// authenticated tenant user can invite a teammate for now (no distinct
+/// admin/owner role exists yet — see
+/// .ai/decisions/current/2026-08-28-no-rbac-enforcement-yet.md). No initial
+/// business-unit role is assigned; that's a separate call to
+/// `POST /business-units/:id/roles`.
+pub async fn create_teammate(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Json(req): Json<CreateTeammateRequest>,
+) -> Result<Json<SignupResponse>, AppError> {
+    if req.email.trim().is_empty() {
+        return Err(AppError::BadRequest("email is required".into()));
+    }
+    if req.password.len() < 8 {
+        return Err(AppError::BadRequest(
+            "password must be at least 8 characters".into(),
+        ));
+    }
+
+    let existing = entity::prelude::User::find()
+        .filter(entity::user::Column::Email.eq(&req.email))
+        .one(&state.admin_db)
+        .await?;
+    if existing.is_some() {
+        return Err(AppError::BadRequest("email is already registered".into()));
+    }
+
+    let tenant_id = user.tenant_id;
+    let new_user_id = Uuid::new_v4();
+    let email = req.email.clone();
+    let password_hash = password::hash_password(&req.password)?;
+
+    state
+        .app_db
+        .transaction::<_, (), AppError>(|txn| {
+            Box::pin(async move {
+                set_tenant(txn, tenant_id).await?;
+                let am = entity::user::ActiveModel {
+                    id: Set(new_user_id),
+                    tenant_id: Set(tenant_id),
+                    email: Set(email.clone()),
+                    password_hash: Set(password_hash),
+                    created_at: Set(chrono::Utc::now().into()),
+                };
+                am.insert(txn).await?;
+                audit::record(
+                    txn,
+                    tenant_id,
+                    "user",
+                    new_user_id,
+                    "create",
+                    audit::Actor::User(user.user_id),
+                    None,
+                    Some(serde_json::json!({ "email": email })),
+                )
+                .await?;
+                Ok(())
+            })
+        })
+        .await
+        .map_err(map_txn_err)?;
+
+    Ok(Json(SignupResponse {
+        tenant_id,
+        user_id: new_user_id,
+    }))
+}
+
 pub async fn client_login(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -187,4 +269,55 @@ pub async fn logout(
     }
     let jar = jar.remove(Cookie::from(session::SESSION_COOKIE_NAME));
     Ok((jar, StatusCode::NO_CONTENT))
+}
+
+/// Revokes every session belonging to `target_user_id` — the "instantly
+/// kill a departing employee's access" capability the session-based auth
+/// decision was chosen for, but hadn't actually been built until now (see
+/// .ai/decisions/current/2026-08-28-no-rbac-enforcement-yet.md). Any
+/// authenticated tenant user can revoke any other tenant user's sessions —
+/// there is no distinct admin/owner role yet to restrict this to further;
+/// tenant-level RLS is what stops it from reaching another tenant's users.
+pub async fn revoke_user_sessions(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path(target_user_id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    let tenant_id = user.tenant_id;
+    state
+        .app_db
+        .transaction::<_, (), AppError>(|txn| {
+            Box::pin(async move {
+                set_tenant(txn, tenant_id).await?;
+                if entity::prelude::User::find_by_id(target_user_id)
+                    .one(txn)
+                    .await?
+                    .is_none()
+                {
+                    return Err(AppError::NotFound);
+                }
+                let result = entity::prelude::Session::delete_many()
+                    .filter(entity::session::Column::UserId.eq(target_user_id))
+                    .exec(txn)
+                    .await?;
+                audit::record(
+                    txn,
+                    tenant_id,
+                    "session",
+                    target_user_id,
+                    "delete",
+                    audit::Actor::User(user.user_id),
+                    None,
+                    Some(serde_json::json!({
+                        "revoked_sessions_for_user_id": target_user_id,
+                        "count": result.rows_affected,
+                    })),
+                )
+                .await?;
+                Ok(())
+            })
+        })
+        .await
+        .map_err(map_txn_err)?;
+    Ok(StatusCode::NO_CONTENT)
 }
