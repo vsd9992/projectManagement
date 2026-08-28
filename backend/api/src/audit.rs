@@ -7,6 +7,7 @@ use uuid::Uuid;
 /// internal user or a Client Portal user, but never both — see the
 /// `audit_log_single_actor` CHECK constraint added in
 /// m20260827_000002_add_sales_design_workstream.
+#[derive(Clone, Copy)]
 pub enum Actor {
     User(Uuid),
     ClientUser(Uuid),

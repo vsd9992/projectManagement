@@ -1,5 +1,6 @@
 mod auth;
 mod business_units;
+mod change_orders;
 mod client_portal;
 mod clients;
 pub mod design;
@@ -49,6 +50,14 @@ pub fn router() -> Router<AppState> {
         )
         .route("/quotations/:id", get(quotations::get_quotation))
         .route(
+            "/projects/:project_id/change-orders",
+            get(change_orders::list_change_orders).post(change_orders::create_change_order),
+        )
+        .route(
+            "/change-orders/:id",
+            get(change_orders::get_change_order),
+        )
+        .route(
             "/projects/:project_id/design-assets",
             get(design::list_design_assets).post(design::create_design_asset),
         )
@@ -68,6 +77,26 @@ pub fn router() -> Router<AppState> {
         .route(
             "/client/design-revisions/:id/reject",
             post(client_portal::reject_design_revision),
+        )
+        .route(
+            "/client/quotations/:id/approve",
+            post(client_portal::approve_quotation),
+        )
+        .route(
+            "/client/quotations/:id/reject",
+            post(client_portal::reject_quotation),
+        )
+        .route(
+            "/client/projects/:project_id/change-orders",
+            get(client_portal::list_my_change_orders),
+        )
+        .route(
+            "/client/change-orders/:id/approve",
+            post(client_portal::approve_change_order),
+        )
+        .route(
+            "/client/change-orders/:id/reject",
+            post(client_portal::reject_change_order),
         )
 }
 
