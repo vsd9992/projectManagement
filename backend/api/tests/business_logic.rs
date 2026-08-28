@@ -5,26 +5,6 @@ use common::*;
 use serde_json::json;
 use uuid::Uuid;
 
-/// Sets up a fresh tenant + a project a `sales_design`+`delivery`+`finance`
-/// teammate can act on. Returns (app, owner_cookie, teammate_cookie,
-/// project_id) — the teammate has all three roles so these tests focus on
-/// business-logic correctness, not RBAC (already covered by authz.rs).
-async fn setup_project(prefix: &str) -> (TestApp, String, String, String) {
-    let app = spawn_app().await;
-    let (owner_cookie, _tenant_id, _owner_id) = signup(&app, prefix).await;
-    let bu_id = create_business_unit(&app, &owner_cookie, "HQ").await;
-    let client_id = create_client(&app, &owner_cookie, "Acme").await;
-    let (teammate_cookie, teammate_id) =
-        create_and_login_teammate(&app, &owner_cookie, &format!("{prefix}-tm")).await;
-    assign_role(&app, &owner_cookie, bu_id, teammate_id, "sales_design").await;
-    assign_role(&app, &owner_cookie, bu_id, teammate_id, "delivery").await;
-    assign_role(&app, &owner_cookie, bu_id, teammate_id, "finance").await;
-    let project = create_project(&app, &teammate_cookie, bu_id, client_id, "Test Project").await;
-    assert_eq!(project.status, StatusCode::OK, "{:?}", project.json);
-    let project_id = project.json["id"].as_str().unwrap().to_string();
-    (app, owner_cookie, teammate_cookie, project_id)
-}
-
 #[tokio::test]
 async fn quotation_versions_increment_and_preserve_history() {
     let (app, _owner, cookie, project_id) = setup_project("qvtest").await;

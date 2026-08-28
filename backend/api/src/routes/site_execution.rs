@@ -3,7 +3,7 @@ use axum::{
     Json,
 };
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
@@ -24,12 +24,22 @@ pub struct CreateSiteTaskRequest {
     pub title: String,
 }
 
+#[derive(Serialize)]
+pub struct SiteTaskResponse {
+    #[serde(flatten)]
+    pub task: entity::site_task::Model,
+    /// The linked schedule_tasks row's id — use this (not the site task's
+    /// own id) to create dependencies via POST /schedule-tasks/:id/dependencies
+    /// or set planned/actual dates via POST /schedule-tasks/:id/dates.
+    pub schedule_task_id: Uuid,
+}
+
 pub async fn create_site_task(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
     Json(req): Json<CreateSiteTaskRequest>,
-) -> Result<Json<entity::site_task::Model>, AppError> {
+) -> Result<Json<SiteTaskResponse>, AppError> {
     if req.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
     }
@@ -37,9 +47,9 @@ pub async fn create_site_task(
     let id = Uuid::new_v4();
     let title = req.title.clone();
 
-    let model = state
+    let (task, schedule_task_id) = state
         .app_db
-        .transaction::<_, entity::site_task::Model, AppError>(|txn| {
+        .transaction::<_, (entity::site_task::Model, Uuid), AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -76,12 +86,50 @@ pub async fn create_site_task(
                     Some(serde_json::json!({ "project_id": project_id, "title": title })),
                 )
                 .await?;
-                Ok(model)
+
+                // Every site task gets a permanently-linked schedule_tasks
+                // row — schedule_task_dependencies is the sole place
+                // dependency data lives now (see .ai/decisions/current/
+                // 2026-08-28-phase-3-audit-and-expansion.md).
+                let schedule_task_id = Uuid::new_v4();
+                let sched_am = entity::schedule_task::ActiveModel {
+                    id: Set(schedule_task_id),
+                    tenant_id: Set(tenant_id),
+                    project_id: Set(project_id),
+                    workstream_type: Set(entity::workstream_type::WorkstreamType::SiteExecution),
+                    title: Set(title.clone()),
+                    status: Set("not_started".to_string()),
+                    planned_start_date: Set(None),
+                    planned_end_date: Set(None),
+                    actual_start_date: Set(None),
+                    actual_end_date: Set(None),
+                    site_task_id: Set(Some(id)),
+                    production_task_id: Set(None),
+                    design_revision_id: Set(None),
+                    purchase_order_id: Set(None),
+                    spawned_by_change_order_id: Set(None),
+                    created_by: Set(user.user_id),
+                    created_at: Set(chrono::Utc::now().into()),
+                };
+                sched_am.insert(txn).await?;
+                audit::record(
+                    txn,
+                    tenant_id,
+                    "schedule_task",
+                    schedule_task_id,
+                    "create",
+                    audit::Actor::User(user.user_id),
+                    None,
+                    Some(serde_json::json!({ "project_id": project_id, "title": title, "site_task_id": id })),
+                )
+                .await?;
+
+                Ok((model, schedule_task_id))
             })
         })
         .await
         .map_err(map_txn_err)?;
-    Ok(Json(model))
+    Ok(Json(SiteTaskResponse { task, schedule_task_id }))
 }
 
 pub async fn list_site_tasks(
@@ -165,6 +213,32 @@ pub async fn update_site_task_status(
                     Some(serde_json::json!({ "status": new_status })),
                 )
                 .await?;
+
+                // Keep the linked schedule_task's status in sync so it
+                // doesn't diverge into its own dual-status system.
+                if let Some(sched) = entity::prelude::ScheduleTask::find()
+                    .filter(entity::schedule_task::Column::SiteTaskId.eq(task_id))
+                    .one(txn)
+                    .await?
+                {
+                    let sched_before = serde_json::json!({ "status": sched.status });
+                    let sched_id = sched.id;
+                    let mut sched_am: entity::schedule_task::ActiveModel = sched.into();
+                    sched_am.status = Set(new_status.clone());
+                    sched_am.update(txn).await?;
+                    audit::record(
+                        txn,
+                        tenant_id,
+                        "schedule_task",
+                        sched_id,
+                        "update",
+                        audit::Actor::User(user.user_id),
+                        Some(sched_before),
+                        Some(serde_json::json!({ "status": new_status })),
+                    )
+                    .await?;
+                }
+
                 Ok(updated)
             })
         })
@@ -173,115 +247,12 @@ pub async fn update_site_task_status(
     Ok(Json(model))
 }
 
-#[derive(Deserialize)]
-pub struct AddDependencyRequest {
-    pub depends_on_task_id: Uuid,
-}
-
-/// Declares that `task_id` depends on `depends_on_task_id` — the explicit
-/// cross-task link mechanism from architecture.md (workstreams progress
-/// concurrently; dependencies are declared links, not an assumed stage
-/// order). Both tasks must belong to the same project.
-pub async fn add_site_task_dependency(
-    State(state): State<AppState>,
-    user: AuthenticatedUser,
-    Path(task_id): Path<Uuid>,
-    Json(req): Json<AddDependencyRequest>,
-) -> Result<Json<entity::site_task_dependency::Model>, AppError> {
-    if task_id == req.depends_on_task_id {
-        return Err(AppError::BadRequest(
-            "a task cannot depend on itself".into(),
-        ));
-    }
-    let tenant_id = user.tenant_id;
-    let depends_on_task_id = req.depends_on_task_id;
-
-    let model = state
-        .app_db
-        .transaction::<_, entity::site_task_dependency::Model, AppError>(|txn| {
-            Box::pin(async move {
-                set_tenant(txn, tenant_id).await?;
-
-                let task = entity::prelude::SiteTask::find_by_id(task_id)
-                    .one(txn)
-                    .await?
-                    .ok_or(AppError::NotFound)?;
-                let dep = entity::prelude::SiteTask::find_by_id(depends_on_task_id)
-                    .one(txn)
-                    .await?
-                    .ok_or_else(|| AppError::BadRequest("depends_on_task_id not found".into()))?;
-                if task.project_id != dep.project_id {
-                    return Err(AppError::BadRequest(
-                        "both tasks must belong to the same project".into(),
-                    ));
-                }
-                authz::require_project_business_unit_role(
-                    txn,
-                    user,
-                    task.project_id,
-                    Some("delivery"),
-                )
-                .await?;
-
-                let am = entity::site_task_dependency::ActiveModel {
-                    tenant_id: Set(tenant_id),
-                    task_id: Set(task_id),
-                    depends_on_task_id: Set(depends_on_task_id),
-                    created_at: Set(chrono::Utc::now().into()),
-                };
-                let model = am.insert(txn).await?;
-                audit::record(
-                    txn,
-                    tenant_id,
-                    "site_task_dependency",
-                    task_id,
-                    "create",
-                    audit::Actor::User(user.user_id),
-                    None,
-                    Some(serde_json::json!({ "task_id": task_id, "depends_on_task_id": depends_on_task_id })),
-                )
-                .await?;
-                Ok(model)
-            })
-        })
-        .await
-        .map_err(map_txn_err)?;
-    Ok(Json(model))
-}
-
-pub async fn list_site_task_dependencies(
-    State(state): State<AppState>,
-    user: AuthenticatedUser,
-    Path(task_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::site_task_dependency::Model>>, AppError> {
-    let tenant_id = user.tenant_id;
-    let items = state
-        .app_db
-        .transaction::<_, Vec<entity::site_task_dependency::Model>, AppError>(|txn| {
-            Box::pin(async move {
-                set_tenant(txn, tenant_id).await?;
-                let task = entity::prelude::SiteTask::find_by_id(task_id)
-                    .one(txn)
-                    .await?
-                    .ok_or(AppError::NotFound)?;
-                authz::require_project_business_unit_role(
-                    txn,
-                    user,
-                    task.project_id,
-                    Some("delivery"),
-                )
-                .await?;
-                let items = entity::prelude::SiteTaskDependency::find()
-                    .filter(entity::site_task_dependency::Column::TaskId.eq(task_id))
-                    .all(txn)
-                    .await?;
-                Ok(items)
-            })
-        })
-        .await
-        .map_err(map_txn_err)?;
-    Ok(Json(items))
-}
+// Site-task-to-site-task dependencies used to live here
+// (add_site_task_dependency/list_site_task_dependencies). They now live in
+// routes::schedule as a generalized graph spanning all four workstreams —
+// see .ai/decisions/current/2026-08-28-phase-3-audit-and-expansion.md.
+// create_site_task above links every site task to a schedule_task row;
+// use its schedule_task_id with POST/GET /schedule-tasks/:id/dependencies.
 
 // ---- Daily Logs ----
 

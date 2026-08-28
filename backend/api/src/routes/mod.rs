@@ -11,6 +11,7 @@ mod platform;
 mod procurement;
 mod projects;
 mod quotations;
+mod schedule;
 mod site_execution;
 
 use axum::{
@@ -156,9 +157,21 @@ pub fn router() -> Router<AppState> {
             post(site_execution::update_site_task_status),
         )
         .route(
-            "/site-tasks/:id/dependencies",
-            get(site_execution::list_site_task_dependencies)
-                .post(site_execution::add_site_task_dependency),
+            "/projects/:project_id/schedule-tasks",
+            get(schedule::list_schedule_tasks).post(schedule::create_schedule_task),
+        )
+        .route(
+            "/schedule-tasks/:id/status",
+            post(schedule::update_schedule_task_status),
+        )
+        .route(
+            "/schedule-tasks/:id/dates",
+            post(schedule::update_schedule_task_dates),
+        )
+        .route(
+            "/schedule-tasks/:id/dependencies",
+            get(schedule::list_schedule_task_dependencies)
+                .post(schedule::add_schedule_task_dependency),
         )
         .route(
             "/projects/:project_id/daily-logs",

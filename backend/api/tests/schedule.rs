@@ -1,0 +1,259 @@
+mod common;
+
+use axum::http::StatusCode;
+use common::*;
+use serde_json::json;
+
+#[tokio::test]
+async fn site_task_creation_links_schedule_task_and_syncs_status() {
+    let (app, _owner, cookie, project_id) = setup_project("schedlink").await;
+
+    let task = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/site-tasks"),
+            Some(&cookie),
+            json!({ "title": "Electrical rough-in" }),
+        )
+        .await;
+    assert_eq!(task.status, StatusCode::OK, "{:?}", task.json);
+    let site_task_id = task.json["id"].as_str().unwrap().to_string();
+    let schedule_task_id = task.json["schedule_task_id"].as_str().unwrap().to_string();
+    assert_ne!(site_task_id, schedule_task_id);
+
+    let sched_list = app
+        .call("GET", &format!("/projects/{project_id}/schedule-tasks"), Some(&cookie), json!({}))
+        .await;
+    assert_eq!(sched_list.status, StatusCode::OK);
+    let matching = sched_list
+        .json
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["id"].as_str().unwrap() == schedule_task_id)
+        .expect("linked schedule_task should be listed");
+    assert_eq!(matching["site_task_id"].as_str().unwrap(), site_task_id);
+    assert_eq!(matching["status"], "not_started");
+
+    // Status sync: updating the site task's status also updates the linked
+    // schedule_task's status.
+    let updated = app
+        .call(
+            "POST",
+            &format!("/site-tasks/{site_task_id}/status"),
+            Some(&cookie),
+            json!({ "status": "done" }),
+        )
+        .await;
+    assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
+
+    let sched_list2 = app
+        .call("GET", &format!("/projects/{project_id}/schedule-tasks"), Some(&cookie), json!({}))
+        .await;
+    let matching2 = sched_list2
+        .json
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["id"].as_str().unwrap() == schedule_task_id)
+        .unwrap();
+    assert_eq!(matching2["status"], "done");
+}
+
+#[tokio::test]
+async fn standalone_schedule_task_create_and_status_lifecycle() {
+    let (app, _owner, cookie, project_id) = setup_project("schedstandalone").await;
+
+    let task = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/schedule-tasks"),
+            Some(&cookie),
+            json!({ "title": "Procure steel", "workstream_type": "procurement" }),
+        )
+        .await;
+    assert_eq!(task.status, StatusCode::OK, "{:?}", task.json);
+    assert_eq!(task.json["status"], "not_started");
+    assert_eq!(task.json["workstream_type"], "procurement");
+    let task_id = task.json["id"].as_str().unwrap().to_string();
+
+    let bad_status = app
+        .call(
+            "POST",
+            &format!("/schedule-tasks/{task_id}/status"),
+            Some(&cookie),
+            json!({ "status": "bogus" }),
+        )
+        .await;
+    assert_eq!(bad_status.status, StatusCode::BAD_REQUEST, "{:?}", bad_status.json);
+
+    let in_progress = app
+        .call(
+            "POST",
+            &format!("/schedule-tasks/{task_id}/status"),
+            Some(&cookie),
+            json!({ "status": "in_progress" }),
+        )
+        .await;
+    assert_eq!(in_progress.status, StatusCode::OK, "{:?}", in_progress.json);
+    assert_eq!(in_progress.json["status"], "in_progress");
+}
+
+#[tokio::test]
+async fn schedule_task_dates_full_replace_and_check_constraint() {
+    let (app, _owner, cookie, project_id) = setup_project("scheddates").await;
+    let task = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/schedule-tasks"),
+            Some(&cookie),
+            json!({ "title": "Design draft", "workstream_type": "design" }),
+        )
+        .await;
+    let task_id = task.json["id"].as_str().unwrap().to_string();
+
+    let dates = app
+        .call(
+            "POST",
+            &format!("/schedule-tasks/{task_id}/dates"),
+            Some(&cookie),
+            json!({ "planned_start_date": "2026-09-01", "planned_end_date": "2026-09-10" }),
+        )
+        .await;
+    assert_eq!(dates.status, StatusCode::OK, "{:?}", dates.json);
+    assert_eq!(dates.json["planned_start_date"], "2026-09-01");
+    assert_eq!(dates.json["planned_end_date"], "2026-09-10");
+    assert_eq!(dates.json["actual_start_date"], serde_json::Value::Null);
+}
+
+#[tokio::test]
+async fn schedule_task_dependency_self_and_cross_project_rejected() {
+    let (app, _owner, cookie, project_id) = setup_project("scheddep").await;
+    let t1 = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/schedule-tasks"),
+            Some(&cookie),
+            json!({ "title": "A", "workstream_type": "manufacturing" }),
+        )
+        .await;
+    let t1_id = t1.json["id"].as_str().unwrap().to_string();
+
+    let self_dep = app
+        .call(
+            "POST",
+            &format!("/schedule-tasks/{t1_id}/dependencies"),
+            Some(&cookie),
+            json!({ "depends_on_task_id": t1_id }),
+        )
+        .await;
+    assert_eq!(self_dep.status, StatusCode::BAD_REQUEST, "{:?}", self_dep.json);
+
+    // A task in a different project.
+    let bu2 = create_business_unit(&app, &_owner, "Other BU").await;
+    let client2 = create_client(&app, &_owner, "Other Client").await;
+    let other_project = create_project(&app, &_owner, bu2, client2, "Other Project").await;
+    let project2_id = other_project.json["id"].as_str().unwrap().to_string();
+    let t2 = app
+        .call(
+            "POST",
+            &format!("/projects/{project2_id}/schedule-tasks"),
+            Some(&_owner),
+            json!({ "title": "B", "workstream_type": "manufacturing" }),
+        )
+        .await;
+    assert_eq!(t2.status, StatusCode::OK, "{:?}", t2.json);
+    let t2_id = t2.json["id"].as_str().unwrap().to_string();
+
+    let cross = app
+        .call(
+            "POST",
+            &format!("/schedule-tasks/{t1_id}/dependencies"),
+            Some(&cookie),
+            json!({ "depends_on_task_id": t2_id }),
+        )
+        .await;
+    assert_eq!(cross.status, StatusCode::BAD_REQUEST, "{:?}", cross.json);
+}
+
+#[tokio::test]
+async fn schedule_task_dependency_cycle_rejected() {
+    let (app, _owner, cookie, project_id) = setup_project("schedcycle").await;
+
+    let mut ids = Vec::new();
+    for name in ["A", "B", "C"] {
+        let t = app
+            .call(
+                "POST",
+                &format!("/projects/{project_id}/schedule-tasks"),
+                Some(&cookie),
+                json!({ "title": name, "workstream_type": "site_execution" }),
+            )
+            .await;
+        assert_eq!(t.status, StatusCode::OK, "{:?}", t.json);
+        ids.push(t.json["id"].as_str().unwrap().to_string());
+    }
+    let (a, b, c) = (ids[0].clone(), ids[1].clone(), ids[2].clone());
+
+    // A depends on B, B depends on C (a chain).
+    let ab = app
+        .call(
+            "POST",
+            &format!("/schedule-tasks/{a}/dependencies"),
+            Some(&cookie),
+            json!({ "depends_on_task_id": b }),
+        )
+        .await;
+    assert_eq!(ab.status, StatusCode::OK, "{:?}", ab.json);
+    let bc = app
+        .call(
+            "POST",
+            &format!("/schedule-tasks/{b}/dependencies"),
+            Some(&cookie),
+            json!({ "depends_on_task_id": c }),
+        )
+        .await;
+    assert_eq!(bc.status, StatusCode::OK, "{:?}", bc.json);
+
+    // C depending on A would close the cycle A -> B -> C -> A.
+    let cycle = app
+        .call(
+            "POST",
+            &format!("/schedule-tasks/{c}/dependencies"),
+            Some(&cookie),
+            json!({ "depends_on_task_id": a }),
+        )
+        .await;
+    assert_eq!(
+        cycle.status,
+        StatusCode::BAD_REQUEST,
+        "C depending on A should be rejected as a cycle: {:?}",
+        cycle.json
+    );
+
+    // C depending on a *new*, unrelated task D is not a cycle.
+    let d = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/schedule-tasks"),
+            Some(&cookie),
+            json!({ "title": "D", "workstream_type": "site_execution" }),
+        )
+        .await;
+    let d_id = d.json["id"].as_str().unwrap().to_string();
+    let cd = app
+        .call(
+            "POST",
+            &format!("/schedule-tasks/{c}/dependencies"),
+            Some(&cookie),
+            json!({ "depends_on_task_id": d_id }),
+        )
+        .await;
+    assert_eq!(cd.status, StatusCode::OK, "{:?}", cd.json);
+
+    let listed = app
+        .call("GET", &format!("/schedule-tasks/{a}/dependencies"), Some(&cookie), json!({}))
+        .await;
+    assert_eq!(listed.status, StatusCode::OK);
+    assert_eq!(listed.json.as_array().unwrap().len(), 1);
+}
