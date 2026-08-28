@@ -89,6 +89,7 @@ pub async fn signup(
                     status: Set("active".to_string()),
                     paused_at: Set(None),
                     deleted_at: Set(None),
+                    workstream_labels: Set(serde_json::json!({})),
                 };
                 tenant.insert(txn).await?;
                 audit::record(

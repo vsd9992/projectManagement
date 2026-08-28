@@ -14,6 +14,7 @@ mod projects;
 mod quotations;
 mod schedule;
 mod site_execution;
+mod tenant_settings;
 
 use axum::{
     routing::{get, post},
@@ -189,6 +190,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/notifications/:id/read",
             post(notifications::mark_notification_read),
+        )
+        .route(
+            "/tenant-settings",
+            get(tenant_settings::get_tenant_settings).post(tenant_settings::update_tenant_settings),
         )
         .route(
             "/projects/:project_id/daily-logs",

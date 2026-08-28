@@ -628,3 +628,59 @@ async fn progressive_billing_computes_incremental_base_and_matches_hand_computed
         rejected.json
     );
 }
+
+#[tokio::test]
+async fn tenant_settings_read_and_update_is_tenant_admin_only() {
+    let app = spawn_app().await;
+    let (owner_cookie, _tenant_id, _owner_id) = signup(&app, "tsettingstest-owner").await;
+    let bu_id = create_business_unit(&app, &owner_cookie, "HQ").await;
+    let (teammate_cookie, teammate_id) =
+        create_and_login_teammate(&app, &owner_cookie, "tsettingstest-tm").await;
+    assign_role(&app, &owner_cookie, bu_id, teammate_id, "delivery").await;
+
+    let initial = app.call("GET", "/tenant-settings", Some(&owner_cookie), json!({})).await;
+    assert_eq!(initial.status, StatusCode::OK, "{:?}", initial.json);
+    assert_eq!(initial.json["region_profile"], "india");
+    assert_eq!(initial.json["workstream_labels"], serde_json::json!({}));
+
+    let non_admin_update = app
+        .call(
+            "POST",
+            "/tenant-settings",
+            Some(&teammate_cookie),
+            json!({ "workstream_labels": { "site_execution": "Installation" } }),
+        )
+        .await;
+    assert_eq!(
+        non_admin_update.status,
+        StatusCode::FORBIDDEN,
+        "non-admin should not be able to update tenant settings: {:?}",
+        non_admin_update.json
+    );
+
+    let update = app
+        .call(
+            "POST",
+            "/tenant-settings",
+            Some(&owner_cookie),
+            json!({ "workstream_labels": { "site_execution": "Installation", "manufacturing": "Production" } }),
+        )
+        .await;
+    assert_eq!(update.status, StatusCode::OK, "{:?}", update.json);
+    assert_eq!(update.json["workstream_labels"]["site_execution"], "Installation");
+    assert_eq!(update.json["workstream_labels"]["manufacturing"], "Production");
+    assert_eq!(update.json["region_profile"], "india", "unspecified field should be unchanged");
+
+    let bad_region = app
+        .call(
+            "POST",
+            "/tenant-settings",
+            Some(&owner_cookie),
+            json!({ "region_profile": "usa" }),
+        )
+        .await;
+    assert_eq!(bad_region.status, StatusCode::BAD_REQUEST, "{:?}", bad_region.json);
+
+    let refetched = app.call("GET", "/tenant-settings", Some(&owner_cookie), json!({})).await;
+    assert_eq!(refetched.json["workstream_labels"]["site_execution"], "Installation");
+}
