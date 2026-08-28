@@ -379,6 +379,7 @@ async fn decide_change_order(
                     let actor = audit::Actor::ClientUser(client.client_user_id);
                     new_quotation_id = apply_change_order(txn, tenant_id, &change_order, actor).await?;
                     apply_workstream_additions(txn, tenant_id, &change_order, actor).await?;
+                    apply_schedule_additions(txn, tenant_id, &change_order, actor).await?;
                 }
 
                 let co_id = change_order.id;
@@ -580,6 +581,91 @@ async fn apply_workstream_additions(
             })),
         )
         .await?;
+    }
+    Ok(())
+}
+
+/// Spawns any schedule task(s) an approved Change Order requested, on the
+/// same project, attributed to the same actor as the rest of the
+/// approval's cascade. Each spawned task is a brand-new node with at most
+/// one new incoming dependency edge, so it can never itself be part of an
+/// existing cycle — no cycle check needed here (unlike
+/// schedule::add_schedule_task_dependency, which links two pre-existing
+/// tasks and genuinely could close one). Idempotent no-op when the change
+/// order requested none.
+async fn apply_schedule_additions(
+    txn: &sea_orm::DatabaseTransaction,
+    tenant_id: Uuid,
+    change_order: &entity::change_order::Model,
+    actor: audit::Actor,
+) -> Result<(), AppError> {
+    let staged = entity::prelude::ChangeOrderScheduleTask::find()
+        .filter(entity::change_order_schedule_task::Column::ChangeOrderId.eq(change_order.id))
+        .all(txn)
+        .await?;
+    if staged.is_empty() {
+        return Ok(());
+    }
+
+    for s in staged {
+        let id = Uuid::new_v4();
+        let am = entity::schedule_task::ActiveModel {
+            id: Set(id),
+            tenant_id: Set(tenant_id),
+            project_id: Set(change_order.project_id),
+            workstream_type: Set(s.workstream_type.clone()),
+            title: Set(s.title.clone()),
+            status: Set("not_started".to_string()),
+            planned_start_date: Set(s.planned_start_date),
+            planned_end_date: Set(s.planned_end_date),
+            actual_start_date: Set(None),
+            actual_end_date: Set(None),
+            site_task_id: Set(None),
+            production_task_id: Set(None),
+            design_revision_id: Set(None),
+            purchase_order_id: Set(None),
+            spawned_by_change_order_id: Set(Some(change_order.id)),
+            created_by: Set(change_order.requested_by),
+            created_at: Set(chrono::Utc::now().into()),
+        };
+        am.insert(txn).await?;
+        audit::record(
+            txn,
+            tenant_id,
+            "schedule_task",
+            id,
+            "create",
+            actor,
+            None,
+            Some(serde_json::json!({
+                "project_id": change_order.project_id,
+                "title": s.title,
+                "workstream_type": s.workstream_type,
+                "spawned_by_change_order": change_order.id,
+            })),
+        )
+        .await?;
+
+        if let Some(dep_id) = s.depends_on_existing_task_id {
+            let edge_am = entity::schedule_task_dependency::ActiveModel {
+                tenant_id: Set(tenant_id),
+                task_id: Set(id),
+                depends_on_task_id: Set(dep_id),
+                created_at: Set(chrono::Utc::now().into()),
+            };
+            edge_am.insert(txn).await?;
+            audit::record(
+                txn,
+                tenant_id,
+                "schedule_task_dependency",
+                id,
+                "create",
+                actor,
+                None,
+                Some(serde_json::json!({ "task_id": id, "depends_on_task_id": dep_id })),
+            )
+            .await?;
+        }
     }
     Ok(())
 }

@@ -582,3 +582,99 @@ async fn already_started_schedule_task_shift_does_not_notify() {
         notifs.json
     );
 }
+
+#[tokio::test]
+async fn change_order_approval_spawns_schedule_tasks() {
+    let app = spawn_app().await;
+    let (owner_cookie, _tenant_id, _owner_id) = signup(&app, "cosched-owner").await;
+    let bu_id = create_business_unit(&app, &owner_cookie, "HQ").await;
+    let client_id = create_client(&app, &owner_cookie, "Acme").await;
+    let project = create_project(&app, &owner_cookie, bu_id, client_id, "CO Sched Project").await;
+    let project_id = project.json["id"].as_str().unwrap().to_string();
+
+    let quotation = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/quotations"),
+            Some(&owner_cookie),
+            json!({ "line_items": [{ "description": "Base scope", "quantity": "1", "unit": "set", "unit_rate": "1000" }] }),
+        )
+        .await;
+    let quotation_id = quotation.json["id"].as_str().unwrap().to_string();
+    let (client_cookie, _) = create_and_login_client_user(&app, &owner_cookie, client_id, "cosched-client").await;
+    app.call(
+        "POST",
+        &format!("/client/quotations/{quotation_id}/approve"),
+        Some(&client_cookie),
+        json!({}),
+    )
+    .await;
+
+    let existing = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/schedule-tasks"),
+            Some(&owner_cookie),
+            json!({ "title": "Existing groundwork", "workstream_type": "site_execution" }),
+        )
+        .await;
+    let existing_id = existing.json["id"].as_str().unwrap().to_string();
+
+    let co = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/change-orders"),
+            Some(&owner_cookie),
+            json!({
+                "base_quotation_id": quotation_id,
+                "title": "Add scope with schedule tasks",
+                "add_schedule_tasks": [{
+                    "title": "New scope work",
+                    "workstream_type": "site_execution",
+                    "planned_start_date": "2026-12-01",
+                    "planned_end_date": "2026-12-10",
+                    "depends_on_existing_task_id": existing_id,
+                }],
+            }),
+        )
+        .await;
+    assert_eq!(co.status, StatusCode::OK, "{:?}", co.json);
+    let co_id = co.json["id"].as_str().unwrap().to_string();
+    assert_eq!(co.json["add_schedule_tasks"].as_array().unwrap().len(), 1);
+
+    // Not yet materialized into schedule_tasks before approval.
+    let before_approval = app
+        .call("GET", &format!("/projects/{project_id}/schedule-tasks"), Some(&owner_cookie), json!({}))
+        .await;
+    assert_eq!(before_approval.json.as_array().unwrap().len(), 1, "only the pre-existing task so far");
+
+    let approve = app
+        .call(
+            "POST",
+            &format!("/client/change-orders/{co_id}/approve"),
+            Some(&client_cookie),
+            json!({}),
+        )
+        .await;
+    assert_eq!(approve.status, StatusCode::OK, "{:?}", approve.json);
+
+    let after_approval = app
+        .call("GET", &format!("/projects/{project_id}/schedule-tasks"), Some(&owner_cookie), json!({}))
+        .await;
+    let tasks = after_approval.json.as_array().unwrap();
+    assert_eq!(tasks.len(), 2, "the spawned task should now exist: {:?}", tasks);
+    let spawned = tasks
+        .iter()
+        .find(|t| t["title"] == "New scope work")
+        .expect("spawned task should be present");
+    assert_eq!(spawned["spawned_by_change_order_id"].as_str().unwrap(), co_id);
+    let spawned_id = spawned["id"].as_str().unwrap().to_string();
+
+    let deps = app
+        .call("GET", &format!("/schedule-tasks/{spawned_id}/dependencies"), Some(&owner_cookie), json!({}))
+        .await;
+    assert_eq!(deps.status, StatusCode::OK);
+    let dep_list = deps.json.as_array().unwrap();
+    assert_eq!(dep_list.len(), 1, "{:?}", dep_list);
+    assert_eq!(dep_list[0]["depends_on_task_id"].as_str().unwrap(), existing_id);
+}

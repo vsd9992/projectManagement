@@ -2,6 +2,7 @@ use axum::{
     extract::{Path, State},
     Json,
 };
+use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
 use serde::{Deserialize, Serialize};
@@ -45,6 +46,25 @@ pub struct CreateChangeOrderRequest {
     /// only once the client approves this change order.
     #[serde(default)]
     pub add_workstreams: Vec<entity::workstream_type::WorkstreamType>,
+    /// Schedule task(s) this Change Order requests spawning for added
+    /// scope, alongside (or instead of) BOQ/workstream changes — the
+    /// generalized "spawns new WBS items... re-baselines the schedule
+    /// graph" half of workflows.md's Scenario 3, closed in Phase 3. Takes
+    /// effect only once the client approves this change order.
+    #[serde(default)]
+    pub add_schedule_tasks: Vec<NewScheduleTaskInput>,
+}
+
+#[derive(Deserialize)]
+pub struct NewScheduleTaskInput {
+    pub title: String,
+    pub workstream_type: entity::workstream_type::WorkstreamType,
+    pub planned_start_date: Option<NaiveDate>,
+    pub planned_end_date: Option<NaiveDate>,
+    /// Must reference an *existing* schedule_task in this project — a
+    /// newly staged task cannot depend on a sibling in the same request
+    /// (v1 simplification, to avoid within-request ordering complexity).
+    pub depends_on_existing_task_id: Option<Uuid>,
 }
 
 #[derive(Serialize)]
@@ -53,6 +73,7 @@ pub struct ChangeOrderResponse {
     pub change_order: entity::change_order::Model,
     pub line_items: Vec<entity::change_order_line_item::Model>,
     pub add_workstreams: Vec<entity::change_order_workstream::Model>,
+    pub add_schedule_tasks: Vec<entity::change_order_schedule_task::Model>,
 }
 
 /// Proposes a Change Order against a project's currently approved quotation.
@@ -68,9 +89,9 @@ pub async fn create_change_order(
     if req.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
     }
-    if req.line_items.is_empty() && req.add_workstreams.is_empty() {
+    if req.line_items.is_empty() && req.add_workstreams.is_empty() && req.add_schedule_tasks.is_empty() {
         return Err(AppError::BadRequest(
-            "at least one line item or workstream addition is required".into(),
+            "at least one line item, workstream addition, or schedule task addition is required".into(),
         ));
     }
     for li in &req.line_items {
@@ -87,10 +108,11 @@ pub async fn create_change_order(
     let description = req.description.clone();
     let base_quotation_id = req.base_quotation_id;
     let add_workstreams = req.add_workstreams.clone();
+    let add_schedule_tasks_input = req.add_schedule_tasks;
 
-    let (change_order, line_items, workstreams) = state
+    let (change_order, line_items, workstreams, schedule_tasks) = state
         .app_db
-        .transaction::<_, (entity::change_order::Model, Vec<entity::change_order_line_item::Model>, Vec<entity::change_order_workstream::Model>), AppError>(|txn| {
+        .transaction::<_, (entity::change_order::Model, Vec<entity::change_order_line_item::Model>, Vec<entity::change_order_workstream::Model>, Vec<entity::change_order_schedule_task::Model>), AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -115,6 +137,30 @@ pub async fn create_change_order(
                             "workstream {:?} is already enabled on this project",
                             wt
                         )));
+                    }
+                }
+
+                for staged in &add_schedule_tasks_input {
+                    if staged.title.trim().is_empty() {
+                        return Err(AppError::BadRequest(
+                            "add_schedule_tasks title is required".into(),
+                        ));
+                    }
+                    if let Some(dep_id) = staged.depends_on_existing_task_id {
+                        let dep_task = entity::prelude::ScheduleTask::find_by_id(dep_id)
+                            .one(txn)
+                            .await?
+                            .ok_or_else(|| {
+                                AppError::BadRequest(
+                                    "depends_on_existing_task_id not found".into(),
+                                )
+                            })?;
+                        if dep_task.project_id != project_id {
+                            return Err(AppError::BadRequest(
+                                "depends_on_existing_task_id does not belong to this project"
+                                    .into(),
+                            ));
+                        }
                     }
                 }
 
@@ -251,7 +297,36 @@ pub async fn create_change_order(
                     workstreams.push(model);
                 }
 
-                Ok((change_order, line_items, workstreams))
+                let mut schedule_tasks = Vec::with_capacity(add_schedule_tasks_input.len());
+                for staged in &add_schedule_tasks_input {
+                    let id = Uuid::new_v4();
+                    let am = entity::change_order_schedule_task::ActiveModel {
+                        id: Set(id),
+                        tenant_id: Set(tenant_id),
+                        change_order_id: Set(change_order_id),
+                        title: Set(staged.title.clone()),
+                        workstream_type: Set(staged.workstream_type.clone()),
+                        planned_start_date: Set(staged.planned_start_date),
+                        planned_end_date: Set(staged.planned_end_date),
+                        depends_on_existing_task_id: Set(staged.depends_on_existing_task_id),
+                        created_at: Set(chrono::Utc::now().into()),
+                    };
+                    let model = am.insert(txn).await?;
+                    audit::record(
+                        txn,
+                        tenant_id,
+                        "change_order_schedule_task",
+                        id,
+                        "create",
+                        audit::Actor::User(user.user_id),
+                        None,
+                        Some(serde_json::json!({ "change_order_id": change_order_id, "title": staged.title, "workstream_type": staged.workstream_type })),
+                    )
+                    .await?;
+                    schedule_tasks.push(model);
+                }
+
+                Ok((change_order, line_items, workstreams, schedule_tasks))
             })
         })
         .await
@@ -261,6 +336,7 @@ pub async fn create_change_order(
         change_order,
         line_items,
         add_workstreams: workstreams,
+        add_schedule_tasks: schedule_tasks,
     }))
 }
 
@@ -302,7 +378,7 @@ pub async fn get_change_order(
     let tenant_id = user.tenant_id;
     let result = state
         .app_db
-        .transaction::<_, Option<(entity::change_order::Model, Vec<entity::change_order_line_item::Model>, Vec<entity::change_order_workstream::Model>)>, AppError>(|txn| {
+        .transaction::<_, Option<(entity::change_order::Model, Vec<entity::change_order_line_item::Model>, Vec<entity::change_order_workstream::Model>, Vec<entity::change_order_schedule_task::Model>)>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let Some(change_order) = entity::prelude::ChangeOrder::find_by_id(change_order_id).one(txn).await? else {
@@ -323,16 +399,21 @@ pub async fn get_change_order(
                     .filter(entity::change_order_workstream::Column::ChangeOrderId.eq(change_order_id))
                     .all(txn)
                     .await?;
-                Ok(Some((change_order, line_items, workstreams)))
+                let schedule_tasks = entity::prelude::ChangeOrderScheduleTask::find()
+                    .filter(entity::change_order_schedule_task::Column::ChangeOrderId.eq(change_order_id))
+                    .all(txn)
+                    .await?;
+                Ok(Some((change_order, line_items, workstreams, schedule_tasks)))
             })
         })
         .await
         .map_err(map_txn_err)?;
 
-    let (change_order, line_items, workstreams) = result.ok_or(AppError::NotFound)?;
+    let (change_order, line_items, workstreams, schedule_tasks) = result.ok_or(AppError::NotFound)?;
     Ok(Json(ChangeOrderResponse {
         change_order,
         line_items,
         add_workstreams: workstreams,
+        add_schedule_tasks: schedule_tasks,
     }))
 }
