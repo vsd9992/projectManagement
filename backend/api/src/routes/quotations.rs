@@ -50,6 +50,14 @@ pub async fn create_quotation(
             "at least one line item is required".into(),
         ));
     }
+    for li in &req.line_items {
+        if li.quantity <= Decimal::ZERO {
+            return Err(AppError::BadRequest("quantity must be positive".into()));
+        }
+        if li.unit_rate < Decimal::ZERO {
+            return Err(AppError::BadRequest("unit_rate must not be negative".into()));
+        }
+    }
     let tenant_id = user.tenant_id;
     let quotation_id = Uuid::new_v4();
 

@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::{
     audit,
     auth::{password, session::AuthenticatedUser},
+    authz,
     db::set_tenant,
     error::{map_txn_err, AppError},
     state::AppState,
@@ -36,6 +37,7 @@ pub async fn create_client(
         .transaction::<_, entity::client::Model, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_any_business_unit_role(txn, user, Some("sales_design")).await?;
                 let am = entity::client::ActiveModel {
                     id: Set(id),
                     tenant_id: Set(tenant_id),
@@ -97,6 +99,7 @@ pub async fn create_client_user(
         .transaction::<_, entity::client_user::Model, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_any_business_unit_role(txn, user, Some("sales_design")).await?;
 
                 // Confirms client_id belongs to this tenant (RLS-scoped read).
                 if entity::prelude::Client::find_by_id(client_id)
@@ -146,6 +149,7 @@ pub async fn list_clients(
         .transaction::<_, Vec<entity::client::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_any_business_unit_role(txn, user, None).await?;
                 let items = entity::prelude::Client::find().all(txn).await?;
                 Ok(items)
             })

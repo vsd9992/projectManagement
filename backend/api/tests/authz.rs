@@ -70,11 +70,14 @@ async fn purchase_order_creation_requires_delivery_role() {
     assert_eq!(project.status, StatusCode::OK, "{:?}", project.json);
     let project_id = project.json["id"].as_str().unwrap();
 
+    // Vendor creation now requires `delivery` role too (Stage 1 audit fix) —
+    // created via the tenant-admin owner here since this test's teammate
+    // doesn't have `delivery` yet at this point.
     let vendor_resp = app
         .call(
             "POST",
             "/vendors",
-            Some(&teammate_cookie),
+            Some(&owner_cookie),
             json!({ "name": "Test Vendor" }),
         )
         .await;
@@ -581,5 +584,74 @@ async fn change_order_can_enable_new_workstream() {
         StatusCode::OK,
         "site task creation should now succeed — the approved change order enabled site_execution: {:?}",
         now_allowed.json
+    );
+}
+
+/// Covers a Phase 3 audit-pass finding: create_vendor/list_vendors had no
+/// authz check at all before this fix — any authenticated user, any role,
+/// could create/list vendors, unlike create_purchase_order in the same file.
+#[tokio::test]
+async fn vendor_creation_requires_delivery_role() {
+    let app = spawn_app().await;
+    let (owner_cookie, _tenant_id, _owner_id) = signup(&app, "vendortest-owner").await;
+    let bu_id = create_business_unit(&app, &owner_cookie, "HQ").await;
+    let (teammate_cookie, teammate_id) =
+        create_and_login_teammate(&app, &owner_cookie, "vendortest-teammate").await;
+
+    assign_role(&app, &owner_cookie, bu_id, teammate_id, "sales_design").await;
+    let resp = app
+        .call("POST", "/vendors", Some(&teammate_cookie), json!({ "name": "Acme Supplies" }))
+        .await;
+    assert_eq!(
+        resp.status,
+        StatusCode::FORBIDDEN,
+        "sales_design role should not be able to create a vendor: {:?}",
+        resp.json
+    );
+
+    assign_role(&app, &owner_cookie, bu_id, teammate_id, "delivery").await;
+    let resp = app
+        .call("POST", "/vendors", Some(&teammate_cookie), json!({ "name": "Acme Supplies" }))
+        .await;
+    assert_eq!(
+        resp.status,
+        StatusCode::OK,
+        "delivery role should be able to create a vendor: {:?}",
+        resp.json
+    );
+}
+
+/// Covers a Phase 3 audit-pass finding: create_client/create_client_user
+/// had no authz check at all before this fix — any authenticated internal
+/// user could create clients AND mint Client Portal login credentials for
+/// any client in the tenant.
+#[tokio::test]
+async fn client_creation_requires_sales_design_role() {
+    let app = spawn_app().await;
+    let (owner_cookie, _tenant_id, _owner_id) = signup(&app, "clienttest-owner").await;
+    let bu_id = create_business_unit(&app, &owner_cookie, "HQ").await;
+    let (teammate_cookie, teammate_id) =
+        create_and_login_teammate(&app, &owner_cookie, "clienttest-teammate").await;
+
+    assign_role(&app, &owner_cookie, bu_id, teammate_id, "delivery").await;
+    let resp = app
+        .call("POST", "/clients", Some(&teammate_cookie), json!({ "name": "New Client Co" }))
+        .await;
+    assert_eq!(
+        resp.status,
+        StatusCode::FORBIDDEN,
+        "delivery role should not be able to create a client: {:?}",
+        resp.json
+    );
+
+    assign_role(&app, &owner_cookie, bu_id, teammate_id, "sales_design").await;
+    let resp = app
+        .call("POST", "/clients", Some(&teammate_cookie), json!({ "name": "New Client Co" }))
+        .await;
+    assert_eq!(
+        resp.status,
+        StatusCode::OK,
+        "sales_design role should be able to create a client: {:?}",
+        resp.json
     );
 }

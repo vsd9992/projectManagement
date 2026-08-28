@@ -203,6 +203,16 @@ pub async fn create_invoice(
                         "an invoice can only be raised against a completed milestone".into(),
                     ));
                 }
+                if entity::prelude::Invoice::find()
+                    .filter(entity::invoice::Column::MilestoneId.eq(milestone_id))
+                    .one(txn)
+                    .await?
+                    .is_some()
+                {
+                    return Err(AppError::BadRequest(
+                        "an invoice has already been raised against this milestone".into(),
+                    ));
+                }
 
                 let tenant = entity::prelude::Tenant::find_by_id(tenant_id)
                     .one(txn)

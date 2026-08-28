@@ -73,6 +73,14 @@ pub async fn create_change_order(
             "at least one line item or workstream addition is required".into(),
         ));
     }
+    for li in &req.line_items {
+        if li.quantity <= Decimal::ZERO {
+            return Err(AppError::BadRequest("quantity must be positive".into()));
+        }
+        if li.unit_rate < Decimal::ZERO {
+            return Err(AppError::BadRequest("unit_rate must not be negative".into()));
+        }
+    }
     let tenant_id = user.tenant_id;
     let change_order_id = Uuid::new_v4();
     let title = req.title.clone();

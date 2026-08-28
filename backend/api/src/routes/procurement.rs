@@ -40,6 +40,7 @@ pub async fn create_vendor(
         .transaction::<_, entity::vendor::Model, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_any_business_unit_role(txn, user, Some("delivery")).await?;
                 let am = entity::vendor::ActiveModel {
                     id: Set(id),
                     tenant_id: Set(tenant_id),
@@ -78,6 +79,7 @@ pub async fn list_vendors(
         .transaction::<_, Vec<entity::vendor::Model>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
+                authz::require_any_business_unit_role(txn, user, None).await?;
                 Ok(entity::prelude::Vendor::find().all(txn).await?)
             })
         })

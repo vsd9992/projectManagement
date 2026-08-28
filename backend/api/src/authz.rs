@@ -81,6 +81,28 @@ pub async fn require_project_workstream(
     Ok(())
 }
 
+/// For tenant-wide entities with no `business_unit_id` of their own
+/// (vendors, clients) — confirms `user` holds `required_role` in *some*
+/// business unit in the tenant, or is a tenant admin. When `required_role`
+/// is `None`, any role (plain membership) passes. Weaker than the
+/// project-scoped checks above (any holder of the role tenant-wide passes,
+/// not just one BU's), which is a real limitation given the entity itself
+/// isn't BU-scoped — see .ai/decisions/current/2026-08-28-phase-3-audit-and-expansion.md.
+pub async fn require_any_business_unit_role(
+    txn: &DatabaseTransaction,
+    user: AuthenticatedUser,
+    required_role: Option<&str>,
+) -> Result<(), AppError> {
+    if user.is_tenant_admin {
+        return Ok(());
+    }
+    let ids = accessible_business_units(txn, user, required_role).await?;
+    if ids.is_empty() {
+        return Err(AppError::Forbidden);
+    }
+    Ok(())
+}
+
 fn workstream_label(w: &entity::workstream_type::WorkstreamType) -> &'static str {
     use entity::workstream_type::WorkstreamType::*;
     match w {
