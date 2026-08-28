@@ -49,6 +49,48 @@ pub async fn require_project_business_unit_role(
     require_business_unit_role(txn, user, project.business_unit_id, required_role).await
 }
 
+/// Confirms `project_id` has `workstream` enabled. This is the guardrail
+/// that makes a project's enabled-workstream set (architecture.md's "one or
+/// more Workstreams") actually restrict what can be recorded against it,
+/// not just describe it (see .ai/project/risks.md risk #7 and
+/// .ai/decisions/current/2026-08-28-workstream-enforcement-and-expansion.md).
+/// Call this alongside `require_project_business_unit_role` at the *root*
+/// creation endpoint for each workstream-specific entity family
+/// (design_asset, production_task, purchase_order, site_task/daily_log/
+/// punch_list_item/site_query) — not on reads/lists, and not on children of
+/// an already-gated root (e.g. design_revision, whose parent design_asset
+/// couldn't exist without this check already having passed, and no
+/// endpoint ever removes a workstream once enabled).
+pub async fn require_project_workstream(
+    txn: &DatabaseTransaction,
+    project_id: Uuid,
+    workstream: entity::workstream_type::WorkstreamType,
+) -> Result<(), AppError> {
+    let exists = entity::prelude::ProjectWorkstream::find()
+        .filter(entity::project_workstream::Column::ProjectId.eq(project_id))
+        .filter(entity::project_workstream::Column::WorkstreamType.eq(workstream.clone()))
+        .one(txn)
+        .await?
+        .is_some();
+    if !exists {
+        return Err(AppError::BadRequest(format!(
+            "project does not have the '{}' workstream enabled",
+            workstream_label(&workstream)
+        )));
+    }
+    Ok(())
+}
+
+fn workstream_label(w: &entity::workstream_type::WorkstreamType) -> &'static str {
+    use entity::workstream_type::WorkstreamType::*;
+    match w {
+        Design => "design",
+        Manufacturing => "manufacturing",
+        Procurement => "procurement",
+        SiteExecution => "site_execution",
+    }
+}
+
 /// Fails unless `user` is their tenant's admin.
 pub fn require_tenant_admin(user: AuthenticatedUser) -> Result<(), AppError> {
     if user.is_tenant_admin {

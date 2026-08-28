@@ -34,7 +34,17 @@ pub struct CreateChangeOrderRequest {
     pub base_quotation_id: Uuid,
     pub title: String,
     pub description: Option<String>,
+    #[serde(default)]
     pub line_items: Vec<ChangeLineItemInput>,
+    /// Workstream(s) this Change Order requests enabling on the project
+    /// alongside (or instead of) BOQ changes — the only way to add a
+    /// workstream to an already-existing project, since project_workstream
+    /// membership is enforced at the API layer for workstream-specific
+    /// entities (see .ai/decisions/current/
+    /// 2026-08-28-workstream-enforcement-and-expansion.md). Takes effect
+    /// only once the client approves this change order.
+    #[serde(default)]
+    pub add_workstreams: Vec<entity::workstream_type::WorkstreamType>,
 }
 
 #[derive(Serialize)]
@@ -42,6 +52,7 @@ pub struct ChangeOrderResponse {
     #[serde(flatten)]
     pub change_order: entity::change_order::Model,
     pub line_items: Vec<entity::change_order_line_item::Model>,
+    pub add_workstreams: Vec<entity::change_order_workstream::Model>,
 }
 
 /// Proposes a Change Order against a project's currently approved quotation.
@@ -57,9 +68,9 @@ pub async fn create_change_order(
     if req.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
     }
-    if req.line_items.is_empty() {
+    if req.line_items.is_empty() && req.add_workstreams.is_empty() {
         return Err(AppError::BadRequest(
-            "at least one line item is required".into(),
+            "at least one line item or workstream addition is required".into(),
         ));
     }
     let tenant_id = user.tenant_id;
@@ -67,10 +78,11 @@ pub async fn create_change_order(
     let title = req.title.clone();
     let description = req.description.clone();
     let base_quotation_id = req.base_quotation_id;
+    let add_workstreams = req.add_workstreams.clone();
 
-    let (change_order, line_items) = state
+    let (change_order, line_items, workstreams) = state
         .app_db
-        .transaction::<_, (entity::change_order::Model, Vec<entity::change_order_line_item::Model>), AppError>(|txn| {
+        .transaction::<_, (entity::change_order::Model, Vec<entity::change_order_line_item::Model>, Vec<entity::change_order_workstream::Model>), AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -80,6 +92,23 @@ pub async fn create_change_order(
                     Some("sales_design"),
                 )
                 .await?;
+
+                let existing_workstreams: std::collections::HashSet<_> =
+                    entity::prelude::ProjectWorkstream::find()
+                        .filter(entity::project_workstream::Column::ProjectId.eq(project_id))
+                        .all(txn)
+                        .await?
+                        .into_iter()
+                        .map(|w| w.workstream_type)
+                        .collect();
+                for wt in &add_workstreams {
+                    if existing_workstreams.contains(wt) {
+                        return Err(AppError::BadRequest(format!(
+                            "workstream {:?} is already enabled on this project",
+                            wt
+                        )));
+                    }
+                }
 
                 let base_quotation = entity::prelude::Quotation::find_by_id(base_quotation_id)
                     .one(txn)
@@ -161,6 +190,7 @@ pub async fn create_change_order(
                         "title": title,
                         "cost_impact": cost_impact,
                         "line_item_count": req.line_items.len(),
+                        "add_workstreams": add_workstreams,
                     })),
                 )
                 .await?;
@@ -188,7 +218,32 @@ pub async fn create_change_order(
                     line_items.push(model);
                 }
 
-                Ok((change_order, line_items))
+                let mut workstreams = Vec::with_capacity(add_workstreams.len());
+                for wt in &add_workstreams {
+                    let id = Uuid::new_v4();
+                    let am = entity::change_order_workstream::ActiveModel {
+                        id: Set(id),
+                        tenant_id: Set(tenant_id),
+                        change_order_id: Set(change_order_id),
+                        workstream_type: Set(wt.clone()),
+                        created_at: Set(chrono::Utc::now().into()),
+                    };
+                    let model = am.insert(txn).await?;
+                    audit::record(
+                        txn,
+                        tenant_id,
+                        "change_order_workstream",
+                        id,
+                        "create",
+                        audit::Actor::User(user.user_id),
+                        None,
+                        Some(serde_json::json!({ "change_order_id": change_order_id, "workstream_type": wt })),
+                    )
+                    .await?;
+                    workstreams.push(model);
+                }
+
+                Ok((change_order, line_items, workstreams))
             })
         })
         .await
@@ -197,6 +252,7 @@ pub async fn create_change_order(
     Ok(Json(ChangeOrderResponse {
         change_order,
         line_items,
+        add_workstreams: workstreams,
     }))
 }
 
@@ -238,7 +294,7 @@ pub async fn get_change_order(
     let tenant_id = user.tenant_id;
     let result = state
         .app_db
-        .transaction::<_, Option<(entity::change_order::Model, Vec<entity::change_order_line_item::Model>)>, AppError>(|txn| {
+        .transaction::<_, Option<(entity::change_order::Model, Vec<entity::change_order_line_item::Model>, Vec<entity::change_order_workstream::Model>)>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let Some(change_order) = entity::prelude::ChangeOrder::find_by_id(change_order_id).one(txn).await? else {
@@ -255,15 +311,20 @@ pub async fn get_change_order(
                     .filter(entity::change_order_line_item::Column::ChangeOrderId.eq(change_order_id))
                     .all(txn)
                     .await?;
-                Ok(Some((change_order, line_items)))
+                let workstreams = entity::prelude::ChangeOrderWorkstream::find()
+                    .filter(entity::change_order_workstream::Column::ChangeOrderId.eq(change_order_id))
+                    .all(txn)
+                    .await?;
+                Ok(Some((change_order, line_items, workstreams)))
             })
         })
         .await
         .map_err(map_txn_err)?;
 
-    let (change_order, line_items) = result.ok_or(AppError::NotFound)?;
+    let (change_order, line_items, workstreams) = result.ok_or(AppError::NotFound)?;
     Ok(Json(ChangeOrderResponse {
         change_order,
         line_items,
+        add_workstreams: workstreams,
     }))
 }

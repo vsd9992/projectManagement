@@ -376,15 +376,9 @@ async fn decide_change_order(
                 let mut new_quotation_id: Option<Uuid> = None;
 
                 if approve {
-                    new_quotation_id = Some(
-                        apply_change_order(
-                            txn,
-                            tenant_id,
-                            &change_order,
-                            audit::Actor::ClientUser(client.client_user_id),
-                        )
-                        .await?,
-                    );
+                    let actor = audit::Actor::ClientUser(client.client_user_id);
+                    new_quotation_id = apply_change_order(txn, tenant_id, &change_order, actor).await?;
+                    apply_workstream_additions(txn, tenant_id, &change_order, actor).await?;
                 }
 
                 let co_id = change_order.id;
@@ -422,18 +416,23 @@ async fn decide_change_order(
 /// Executes an approved Change Order: builds the re-baselined quotation
 /// (carry-over + modifications + removals + additions), inserts it as the
 /// next version, and supersedes the prior baseline. Returns the new
-/// quotation's id. Only called once the change order's status has already
-/// been confirmed "pending_client_approval" by the caller.
+/// quotation's id, or `None` if this change order carried no line items
+/// (a workstream-only addition — see `apply_workstream_additions` — needs
+/// no BOQ re-baseline). Only called once the change order's status has
+/// already been confirmed "pending_client_approval" by the caller.
 async fn apply_change_order(
     txn: &sea_orm::DatabaseTransaction,
     tenant_id: Uuid,
     change_order: &entity::change_order::Model,
     actor: audit::Actor,
-) -> Result<Uuid, AppError> {
+) -> Result<Option<Uuid>, AppError> {
     let co_line_items = entity::prelude::ChangeOrderLineItem::find()
         .filter(entity::change_order_line_item::Column::ChangeOrderId.eq(change_order.id))
         .all(txn)
         .await?;
+    if co_line_items.is_empty() {
+        return Ok(None);
+    }
     let base_line_items = entity::prelude::QuotationLineItem::find()
         .filter(entity::quotation_line_item::Column::QuotationId.eq(change_order.base_quotation_id))
         .all(txn)
@@ -520,7 +519,69 @@ async fn apply_change_order(
     )
     .await?;
 
-    Ok(new_quotation_id)
+    Ok(Some(new_quotation_id))
+}
+
+/// Enables any workstream(s) an approved Change Order requested, on the
+/// same project, attributed to the same actor as the rest of the approval's
+/// cascade. Skips any workstream already enabled (defensive — creation-time
+/// validation in `change_orders::create_change_order` should already have
+/// rejected that) rather than failing the whole approval on the unique
+/// constraint. Idempotent no-op when the change order requested none.
+async fn apply_workstream_additions(
+    txn: &sea_orm::DatabaseTransaction,
+    tenant_id: Uuid,
+    change_order: &entity::change_order::Model,
+    actor: audit::Actor,
+) -> Result<(), AppError> {
+    let requested = entity::prelude::ChangeOrderWorkstream::find()
+        .filter(entity::change_order_workstream::Column::ChangeOrderId.eq(change_order.id))
+        .all(txn)
+        .await?;
+    if requested.is_empty() {
+        return Ok(());
+    }
+
+    let existing: HashSet<entity::workstream_type::WorkstreamType> =
+        entity::prelude::ProjectWorkstream::find()
+            .filter(entity::project_workstream::Column::ProjectId.eq(change_order.project_id))
+            .all(txn)
+            .await?
+            .into_iter()
+            .map(|w| w.workstream_type)
+            .collect();
+
+    for r in requested {
+        if existing.contains(&r.workstream_type) {
+            continue;
+        }
+        let id = Uuid::new_v4();
+        let am = entity::project_workstream::ActiveModel {
+            id: Set(id),
+            tenant_id: Set(tenant_id),
+            project_id: Set(change_order.project_id),
+            workstream_type: Set(r.workstream_type.clone()),
+            status: Set("not_started".to_string()),
+            created_at: Set(chrono::Utc::now().into()),
+        };
+        am.insert(txn).await?;
+        audit::record(
+            txn,
+            tenant_id,
+            "project_workstream",
+            id,
+            "create",
+            actor,
+            None,
+            Some(serde_json::json!({
+                "project_id": change_order.project_id,
+                "workstream_type": r.workstream_type,
+                "enabled_via_change_order": change_order.id,
+            })),
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -268,6 +268,31 @@ pub async fn create_project(
     client_id: Uuid,
     name: &str,
 ) -> TestResponse {
+    // All four workstreams enabled by default so this generic fixture works
+    // for any workstream-specific endpoint under test (workstream membership
+    // is enforced at the API layer — see .ai/decisions/current/
+    // 2026-08-28-workstream-enforcement-and-expansion.md). A test that cares
+    // about a restricted workstream set should use
+    // create_project_with_workstreams instead.
+    create_project_with_workstreams(
+        app,
+        cookie,
+        bu_id,
+        client_id,
+        name,
+        &["design", "manufacturing", "procurement", "site_execution"],
+    )
+    .await
+}
+
+pub async fn create_project_with_workstreams(
+    app: &TestApp,
+    cookie: &str,
+    bu_id: Uuid,
+    client_id: Uuid,
+    name: &str,
+    workstreams: &[&str],
+) -> TestResponse {
     app.call(
         "POST",
         "/projects",
@@ -276,8 +301,41 @@ pub async fn create_project(
             "name": name,
             "business_unit_id": bu_id,
             "client_id": client_id,
-            "workstreams": ["design"],
+            "workstreams": workstreams,
         }),
     )
     .await
+}
+
+/// Creates a client user via `owner_cookie`, then logs them in through the
+/// Client Portal. Returns (session cookie, client_user_id).
+pub async fn create_and_login_client_user(
+    app: &TestApp,
+    owner_cookie: &str,
+    client_id: Uuid,
+    prefix: &str,
+) -> (String, Uuid) {
+    let email = unique_email(prefix);
+    let resp = app
+        .call(
+            "POST",
+            &format!("/clients/{client_id}/users"),
+            Some(owner_cookie),
+            json!({ "email": email, "password": "correcthorsebattery" }),
+        )
+        .await;
+    assert_eq!(resp.status, StatusCode::OK, "create client user failed: {:?}", resp.json);
+    let client_user_id: Uuid = resp.json["id"].as_str().unwrap().parse().unwrap();
+
+    let login = app
+        .call(
+            "POST",
+            "/auth/client-login",
+            None,
+            json!({ "email": email, "password": "correcthorsebattery" }),
+        )
+        .await;
+    assert_eq!(login.status, StatusCode::OK, "client login failed: {:?}", login.json);
+    let cookie = login.cookie.expect("client login did not set a cookie");
+    (cookie, client_user_id)
 }

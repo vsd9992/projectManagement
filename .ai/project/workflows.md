@@ -1,4 +1,4 @@
-modified: 2026-08-27
+modified: 2026-08-28
 
 # Workflows
 
@@ -8,7 +8,7 @@ Lead → Quotation/BOQ → Design → Client Approval → Procurement/Production
 **This is not strictly sequential.** Design, procurement, and site execution can run in parallel, and scope can be extended or reduced mid-project. The workflow engine models this as a dependency graph across workstream tasks (see `architecture.md` § Project Model), not a single linear stage-gate pipeline. A task in one workstream may declare an explicit dependency on a task in another (e.g. an Install task depends on a specific PO being delivered); absent such a link, workstreams progress independently.
 
 ## Change Order / Scope Change Flow
-1. A scope change (extension or reduction) is raised as a Change Order, referencing the specific WBS/BOQ line items it affects.
+1. A scope change (extension or reduction) is raised as a Change Order, referencing the specific WBS/BOQ line items it affects. A Change Order can also request enabling a new workstream on the project (e.g. adding Site Execution to a project that started design-and-manufacturing-only) — the only way to expand a project's enabled-workstream set once created, since workstream membership is enforced at the API layer (`architecture.md`).
 2. The Change Order captures the cost and schedule impact (before → after) and routes for approval.
 3. **The client must formally approve the Change Order before it is binding.** Internal PM sign-off alone is not sufficient — this is a business rule, not just a notification step.
 4. On approval, the Change Order re-baselines the affected BOQ lines and schedule tasks, and the full before/after trail is retained in the Audit Log (see `architecture.md`).

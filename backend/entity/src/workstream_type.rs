@@ -1,6 +1,6 @@
 use sea_orm::entity::prelude::*;
 
-#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, EnumIter, DeriveActiveEnum, serde::Serialize, serde::Deserialize)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "workstream_type")]
 #[serde(rename_all = "snake_case")]
 pub enum WorkstreamType {

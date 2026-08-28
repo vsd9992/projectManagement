@@ -2,7 +2,7 @@ mod common;
 
 use axum::http::StatusCode;
 use common::*;
-use serde_json::json;
+use serde_json::{json, Value};
 
 /// Covers the RBAC gap fixed in .ai/decisions/current/2026-08-28-rbac-business-unit-scoping-implemented.md:
 /// business-unit membership + role must actually be checked for ordinary
@@ -411,5 +411,175 @@ async fn platform_admin_can_pause_resume_delete_tenant() {
         StatusCode::BAD_REQUEST,
         "a deleted tenant should not be resumable: {:?}",
         resume_deleted.json
+    );
+}
+
+/// Covers the gap fixed in .ai/decisions/current/
+/// 2026-08-28-workstream-enforcement-and-expansion.md (risk #7 in
+/// risks.md): a project's enabled-workstream set must actually restrict
+/// what can be created against it, not just describe it.
+#[tokio::test]
+async fn workstream_membership_enforced_on_creation() {
+    let app = spawn_app().await;
+    let (owner_cookie, _tenant_id, _owner_id) = signup(&app, "wstest-owner").await;
+    let bu_id = create_business_unit(&app, &owner_cookie, "HQ").await;
+    let client_id = create_client(&app, &owner_cookie, "Acme").await;
+
+    // Manufacturing only — no Site Execution, no Design.
+    let project = create_project_with_workstreams(
+        &app,
+        &owner_cookie,
+        bu_id,
+        client_id,
+        "Furniture Only",
+        &["manufacturing"],
+    )
+    .await;
+    assert_eq!(project.status, StatusCode::OK, "{:?}", project.json);
+    let project_id = project.json["id"].as_str().unwrap();
+
+    let site_task = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/site-tasks"),
+            Some(&owner_cookie),
+            json!({ "title": "Install on site" }),
+        )
+        .await;
+    assert_eq!(
+        site_task.status,
+        StatusCode::BAD_REQUEST,
+        "site task creation should be rejected — project never enabled site_execution: {:?}",
+        site_task.json
+    );
+
+    let production_task = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/production-tasks"),
+            Some(&owner_cookie),
+            json!({ "title": "Assemble table" }),
+        )
+        .await;
+    assert_eq!(
+        production_task.status,
+        StatusCode::OK,
+        "production task creation should succeed — manufacturing is enabled: {:?}",
+        production_task.json
+    );
+}
+
+/// The only way to add a workstream to an already-existing project: a
+/// Change Order the client approves. Covers the full round trip — blocked
+/// before approval, enabled and attributed to the client after.
+#[tokio::test]
+async fn change_order_can_enable_new_workstream() {
+    let app = spawn_app().await;
+    let (owner_cookie, _tenant_id, _owner_id) = signup(&app, "wsexpand-owner").await;
+    let bu_id = create_business_unit(&app, &owner_cookie, "HQ").await;
+    let client_id = create_client(&app, &owner_cookie, "Acme").await;
+
+    let project = create_project_with_workstreams(
+        &app,
+        &owner_cookie,
+        bu_id,
+        client_id,
+        "Furniture Only",
+        &["manufacturing"],
+    )
+    .await;
+    assert_eq!(project.status, StatusCode::OK, "{:?}", project.json);
+    let project_id = project.json["id"].as_str().unwrap();
+
+    let quotation = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/quotations"),
+            Some(&owner_cookie),
+            json!({ "line_items": [{ "description": "Table", "quantity": "1", "unit": "set", "unit_rate": "1000" }] }),
+        )
+        .await;
+    assert_eq!(quotation.status, StatusCode::OK, "{:?}", quotation.json);
+    let quotation_id = quotation.json["id"].as_str().unwrap();
+
+    let (client_cookie, _client_user_id) =
+        create_and_login_client_user(&app, &owner_cookie, client_id, "wsexpand-client").await;
+
+    let approve_quote = app
+        .call(
+            "POST",
+            &format!("/client/quotations/{quotation_id}/approve"),
+            Some(&client_cookie),
+            json!({}),
+        )
+        .await;
+    assert_eq!(approve_quote.status, StatusCode::OK, "{:?}", approve_quote.json);
+
+    // Still blocked before the change order exists.
+    let blocked = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/site-tasks"),
+            Some(&owner_cookie),
+            json!({ "title": "Install on site" }),
+        )
+        .await;
+    assert_eq!(blocked.status, StatusCode::BAD_REQUEST, "{:?}", blocked.json);
+
+    let change_order = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/change-orders"),
+            Some(&owner_cookie),
+            json!({
+                "base_quotation_id": quotation_id,
+                "title": "Add on-site installation",
+                "add_workstreams": ["site_execution"],
+            }),
+        )
+        .await;
+    assert_eq!(change_order.status, StatusCode::OK, "{:?}", change_order.json);
+    let change_order_id = change_order.json["id"].as_str().unwrap();
+    assert_eq!(
+        change_order.json["new_quotation_id"],
+        Value::Null,
+        "a workstream-only change order should not create a BOQ re-baseline: {:?}",
+        change_order.json
+    );
+
+    // Still blocked while pending client approval.
+    let still_blocked = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/site-tasks"),
+            Some(&owner_cookie),
+            json!({ "title": "Install on site" }),
+        )
+        .await;
+    assert_eq!(still_blocked.status, StatusCode::BAD_REQUEST, "{:?}", still_blocked.json);
+
+    let approve_co = app
+        .call(
+            "POST",
+            &format!("/client/change-orders/{change_order_id}/approve"),
+            Some(&client_cookie),
+            json!({}),
+        )
+        .await;
+    assert_eq!(approve_co.status, StatusCode::OK, "{:?}", approve_co.json);
+
+    let now_allowed = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/site-tasks"),
+            Some(&owner_cookie),
+            json!({ "title": "Install on site" }),
+        )
+        .await;
+    assert_eq!(
+        now_allowed.status,
+        StatusCode::OK,
+        "site task creation should now succeed — the approved change order enabled site_execution: {:?}",
+        now_allowed.json
     );
 }

@@ -45,6 +45,12 @@ pub async fn create_design_asset(
                     Some("sales_design"),
                 )
                 .await?;
+                authz::require_project_workstream(
+                    txn,
+                    project_id,
+                    entity::workstream_type::WorkstreamType::Design,
+                )
+                .await?;
                 let am = entity::design_asset::ActiveModel {
                     id: Set(id),
                     tenant_id: Set(tenant_id),

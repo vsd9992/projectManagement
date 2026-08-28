@@ -140,6 +140,12 @@ pub async fn create_purchase_order(
                     Some("delivery"),
                 )
                 .await?;
+                authz::require_project_workstream(
+                    txn,
+                    project_id,
+                    entity::workstream_type::WorkstreamType::Procurement,
+                )
+                .await?;
 
                 if entity::prelude::Vendor::find_by_id(vendor_id).one(txn).await?.is_none() {
                     return Err(AppError::BadRequest("vendor_id not found".into()));

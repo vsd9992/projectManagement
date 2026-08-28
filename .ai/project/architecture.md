@@ -1,4 +1,4 @@
-modified: 2026-08-27
+modified: 2026-08-28
 
 # Architecture
 
@@ -18,6 +18,8 @@ Instead of a fixed `project_type` enum, a **Project** has one or more **Workstre
 A pure civil project enables only Site Execution (+ light Design); a pure manufacturing project enables only Manufacturing (+ Procurement); a turnkey interiors project enables all four. This is the core mechanism satisfying "mixed / case-by-case" business lines without special-casing project types throughout the system — new workstream types can be added later (e.g. a deeper Civil-specific workstream) without redesigning the Project entity itself.
 
 Each workstream instance has its own status/state machine and progresses independently and concurrently; cross-workstream dependencies are explicit links (e.g. "Install task depends on Procurement PO #4 delivered"), not an assumed global stage order.
+
+A project's enabled-workstream set is enforced, not just descriptive: the API rejects creating a workstream-specific entity (a design asset, production task, purchase order, or site task/daily log/punch list item/site query) against a project that hasn't enabled that workstream. The only way to add a workstream to an already-existing project is via Change Order client approval — see `.ai/decisions/current/2026-08-28-workstream-enforcement-and-expansion.md`.
 
 ## Core Domain Entities
 

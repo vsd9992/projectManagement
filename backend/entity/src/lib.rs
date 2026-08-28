@@ -2,6 +2,7 @@ pub mod audit_log;
 pub mod business_unit;
 pub mod change_order;
 pub mod change_order_line_item;
+pub mod change_order_workstream;
 pub mod client;
 pub mod client_user;
 pub mod daily_log;
@@ -35,6 +36,7 @@ pub mod prelude {
     pub use super::business_unit::Entity as BusinessUnit;
     pub use super::change_order::Entity as ChangeOrder;
     pub use super::change_order_line_item::Entity as ChangeOrderLineItem;
+    pub use super::change_order_workstream::Entity as ChangeOrderWorkstream;
     pub use super::client::Entity as Client;
     pub use super::client_user::Entity as ClientUser;
     pub use super::daily_log::Entity as DailyLog;

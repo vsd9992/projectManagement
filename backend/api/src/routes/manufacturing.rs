@@ -47,6 +47,12 @@ pub async fn create_production_task(
                     Some("delivery"),
                 )
                 .await?;
+                authz::require_project_workstream(
+                    txn,
+                    project_id,
+                    entity::workstream_type::WorkstreamType::Manufacturing,
+                )
+                .await?;
                 let am = entity::production_task::ActiveModel {
                     id: Set(id),
                     tenant_id: Set(tenant_id),

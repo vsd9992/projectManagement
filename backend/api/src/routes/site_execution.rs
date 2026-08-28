@@ -49,6 +49,12 @@ pub async fn create_site_task(
                     Some("delivery"),
                 )
                 .await?;
+                authz::require_project_workstream(
+                    txn,
+                    project_id,
+                    entity::workstream_type::WorkstreamType::SiteExecution,
+                )
+                .await?;
                 let am = entity::site_task::ActiveModel {
                     id: Set(id),
                     tenant_id: Set(tenant_id),
@@ -310,6 +316,12 @@ pub async fn create_daily_log(
                     Some("delivery"),
                 )
                 .await?;
+                authz::require_project_workstream(
+                    txn,
+                    project_id,
+                    entity::workstream_type::WorkstreamType::SiteExecution,
+                )
+                .await?;
                 let am = entity::daily_log::ActiveModel {
                     id: Set(id),
                     tenant_id: Set(tenant_id),
@@ -399,6 +411,12 @@ pub async fn create_punch_list_item(
                     user,
                     project_id,
                     Some("delivery"),
+                )
+                .await?;
+                authz::require_project_workstream(
+                    txn,
+                    project_id,
+                    entity::workstream_type::WorkstreamType::SiteExecution,
                 )
                 .await?;
                 let am = entity::punch_list_item::ActiveModel {
@@ -543,6 +561,12 @@ pub async fn create_site_query(
                     user,
                     project_id,
                     Some("delivery"),
+                )
+                .await?;
+                authz::require_project_workstream(
+                    txn,
+                    project_id,
+                    entity::workstream_type::WorkstreamType::SiteExecution,
                 )
                 .await?;
                 let am = entity::site_query::ActiveModel {
