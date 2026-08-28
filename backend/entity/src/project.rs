@@ -9,6 +9,10 @@ pub struct Model {
     pub business_unit_id: Uuid,
     pub client_id: Uuid,
     pub name: String,
+    /// One of: "milestone", "progressive" (DB CHECK constraint) — which
+    /// billing method this project's invoices use. See
+    /// .ai/decisions/current/2026-08-28-phase-3-audit-and-expansion.md.
+    pub billing_method: String,
     pub created_at: DateTimeWithTimeZone,
 }
 

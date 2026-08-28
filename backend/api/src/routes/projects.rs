@@ -26,6 +26,15 @@ pub struct CreateProjectRequest {
     /// job, a pure-civil job, or a full turnkey blend without a rigid
     /// project-type enum (see .ai/decisions/current/2026-08-27-composable-workstream-project-model.md).
     pub workstreams: Vec<WorkstreamType>,
+    /// "milestone" (default) or "progressive" (RA-bill-style) — which
+    /// billing method this project's invoices use. See .ai/decisions/
+    /// current/2026-08-28-phase-3-audit-and-expansion.md.
+    #[serde(default = "default_billing_method")]
+    pub billing_method: String,
+}
+
+fn default_billing_method() -> String {
+    "milestone".to_string()
 }
 
 #[derive(Serialize)]
@@ -55,6 +64,12 @@ pub async fn create_project(
     let business_unit_id = req.business_unit_id;
     let client_id = req.client_id;
     let workstream_types = req.workstreams.clone();
+    if req.billing_method != "milestone" && req.billing_method != "progressive" {
+        return Err(AppError::BadRequest(
+            "billing_method must be 'milestone' or 'progressive'".into(),
+        ));
+    }
+    let billing_method = req.billing_method.clone();
 
     let (project, workstreams) = state
         .app_db
@@ -71,6 +86,7 @@ pub async fn create_project(
                         business_unit_id: Set(business_unit_id),
                         client_id: Set(client_id),
                         name: Set(name.clone()),
+                        billing_method: Set(billing_method.clone()),
                         created_at: Set(chrono::Utc::now().into()),
                     };
                     let project = project_am.insert(txn).await?;
@@ -86,6 +102,7 @@ pub async fn create_project(
                             "name": name,
                             "business_unit_id": business_unit_id,
                             "client_id": client_id,
+                            "billing_method": billing_method,
                         })),
                     )
                     .await?;

@@ -146,14 +146,31 @@ pub async fn complete_milestone(
 
 #[derive(Deserialize)]
 pub struct CreateInvoiceRequest {
-    pub milestone_id: Uuid,
-    pub base_amount: Decimal,
+    /// "milestone" (default) or "progressive" — see .ai/decisions/current/
+    /// 2026-08-28-phase-3-audit-and-expansion.md.
+    #[serde(default = "default_billing_method")]
+    pub billing_method: String,
+    /// Required (and only meaningful) for "milestone".
+    pub milestone_id: Option<Uuid>,
+    /// Required for "milestone" — the taxable amount for this bill.
+    /// Ignored for "progressive", which derives its own base_amount from
+    /// certified_value_to_date minus the project's prior progressive bills.
+    pub base_amount: Option<Decimal>,
+    /// Required for "progressive" — the *cumulative* certified value as of
+    /// this bill (Finance re-enters the running total each time, matching
+    /// how real RA bills restate it), not a per-period delta.
+    pub certified_value_to_date: Option<Decimal>,
     pub retention_percent: Decimal,
 }
 
-/// Raises a milestone-based invoice against a *completed* milestone, running
-/// the tenant's regional tax profile (India: GST 18% + GST TDS 2%, both on
-/// the taxable base_amount) plus the given retention percentage. See
+fn default_billing_method() -> String {
+    "milestone".to_string()
+}
+
+/// Raises an invoice using either of the two implemented billing methods,
+/// running the tenant's regional tax profile (India: GST 18% + GST TDS 2%,
+/// both on the taxable base_amount) plus the given retention percentage —
+/// `billing::calculate_invoice` is shared, method-agnostic math. See
 /// api::billing for the calculation and why mobilization-advance recovery
 /// isn't included yet.
 pub async fn create_invoice(
@@ -162,9 +179,6 @@ pub async fn create_invoice(
     Path(project_id): Path<Uuid>,
     Json(req): Json<CreateInvoiceRequest>,
 ) -> Result<Json<entity::invoice::Model>, AppError> {
-    if req.base_amount <= Decimal::ZERO {
-        return Err(AppError::BadRequest("base_amount must be positive".into()));
-    }
     if req.retention_percent < Decimal::ZERO || req.retention_percent > Decimal::from(100) {
         return Err(AppError::BadRequest(
             "retention_percent must be between 0 and 100".into(),
@@ -172,8 +186,7 @@ pub async fn create_invoice(
     }
     let tenant_id = user.tenant_id;
     let id = Uuid::new_v4();
-    let milestone_id = req.milestone_id;
-    let base_amount = req.base_amount;
+    let billing_method = req.billing_method.clone();
     let retention_percent = req.retention_percent;
 
     let model = state
@@ -189,30 +202,84 @@ pub async fn create_invoice(
                 )
                 .await?;
 
-                let milestone = entity::prelude::Milestone::find_by_id(milestone_id)
-                    .one(txn)
-                    .await?
-                    .ok_or_else(|| AppError::BadRequest("milestone_id not found".into()))?;
-                if milestone.project_id != project_id {
-                    return Err(AppError::BadRequest(
-                        "milestone_id does not belong to this project".into(),
-                    ));
-                }
-                if milestone.status != "completed" {
-                    return Err(AppError::BadRequest(
-                        "an invoice can only be raised against a completed milestone".into(),
-                    ));
-                }
-                if entity::prelude::Invoice::find()
-                    .filter(entity::invoice::Column::MilestoneId.eq(milestone_id))
-                    .one(txn)
-                    .await?
-                    .is_some()
+                let (milestone_id, certified_value_to_date, base_amount) = match billing_method
+                    .as_str()
                 {
-                    return Err(AppError::BadRequest(
-                        "an invoice has already been raised against this milestone".into(),
-                    ));
-                }
+                    "milestone" => {
+                        let milestone_id = req.milestone_id.ok_or_else(|| {
+                            AppError::BadRequest("milestone_id is required for milestone billing".into())
+                        })?;
+                        let base_amount = req.base_amount.ok_or_else(|| {
+                            AppError::BadRequest("base_amount is required for milestone billing".into())
+                        })?;
+                        if base_amount <= Decimal::ZERO {
+                            return Err(AppError::BadRequest("base_amount must be positive".into()));
+                        }
+
+                        let milestone = entity::prelude::Milestone::find_by_id(milestone_id)
+                            .one(txn)
+                            .await?
+                            .ok_or_else(|| AppError::BadRequest("milestone_id not found".into()))?;
+                        if milestone.project_id != project_id {
+                            return Err(AppError::BadRequest(
+                                "milestone_id does not belong to this project".into(),
+                            ));
+                        }
+                        if milestone.status != "completed" {
+                            return Err(AppError::BadRequest(
+                                "an invoice can only be raised against a completed milestone".into(),
+                            ));
+                        }
+                        if entity::prelude::Invoice::find()
+                            .filter(entity::invoice::Column::MilestoneId.eq(milestone_id))
+                            .one(txn)
+                            .await?
+                            .is_some()
+                        {
+                            return Err(AppError::BadRequest(
+                                "an invoice has already been raised against this milestone".into(),
+                            ));
+                        }
+                        (Some(milestone_id), None, base_amount)
+                    }
+                    "progressive" => {
+                        let certified = req.certified_value_to_date.ok_or_else(|| {
+                            AppError::BadRequest(
+                                "certified_value_to_date is required for progressive billing".into(),
+                            )
+                        })?;
+                        let project = entity::prelude::Project::find_by_id(project_id)
+                            .one(txn)
+                            .await?
+                            .ok_or(AppError::NotFound)?;
+                        if project.billing_method != "progressive" {
+                            return Err(AppError::BadRequest(
+                                "project is not configured for progressive billing".into(),
+                            ));
+                        }
+                        let prior_bills = entity::prelude::Invoice::find()
+                            .filter(entity::invoice::Column::ProjectId.eq(project_id))
+                            .filter(entity::invoice::Column::BillingMethod.eq("progressive"))
+                            .all(txn)
+                            .await?;
+                        let prior = prior_bills
+                            .iter()
+                            .filter_map(|i| i.certified_value_to_date)
+                            .max()
+                            .unwrap_or(Decimal::ZERO);
+                        if certified <= prior {
+                            return Err(AppError::BadRequest(
+                                "certified_value_to_date must exceed the previous cumulative value".into(),
+                            ));
+                        }
+                        (None, Some(certified), certified - prior)
+                    }
+                    _ => {
+                        return Err(AppError::BadRequest(
+                            "billing_method must be 'milestone' or 'progressive'".into(),
+                        ))
+                    }
+                };
 
                 let tenant = entity::prelude::Tenant::find_by_id(tenant_id)
                     .one(txn)
@@ -226,6 +293,8 @@ pub async fn create_invoice(
                     tenant_id: Set(tenant_id),
                     project_id: Set(project_id),
                     milestone_id: Set(milestone_id),
+                    billing_method: Set(billing_method.clone()),
+                    certified_value_to_date: Set(certified_value_to_date),
                     base_amount: Set(base_amount),
                     retention_percent: Set(retention_percent),
                     gst_amount: Set(calc.gst_amount),
@@ -249,7 +318,9 @@ pub async fn create_invoice(
                     None,
                     Some(serde_json::json!({
                         "project_id": project_id,
+                        "billing_method": billing_method,
                         "milestone_id": milestone_id,
+                        "certified_value_to_date": certified_value_to_date,
                         "base_amount": base_amount,
                         "gross_amount": calc.gross_amount,
                         "net_payable": calc.net_payable,

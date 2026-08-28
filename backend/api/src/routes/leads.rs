@@ -113,6 +113,13 @@ pub struct ConvertLeadRequest {
     /// enabled workstreams (no validation caught it, since project creation
     /// itself is the only place "at least one workstream" was enforced).
     pub workstreams: Vec<WorkstreamType>,
+    /// "milestone" (default) or "progressive" — see projects::CreateProjectRequest.
+    #[serde(default = "default_billing_method")]
+    pub billing_method: String,
+}
+
+fn default_billing_method() -> String {
+    "milestone".to_string()
 }
 
 #[derive(Serialize)]
@@ -138,9 +145,15 @@ pub async fn convert_lead(
             "at least one workstream must be enabled".into(),
         ));
     }
+    if req.billing_method != "milestone" && req.billing_method != "progressive" {
+        return Err(AppError::BadRequest(
+            "billing_method must be 'milestone' or 'progressive'".into(),
+        ));
+    }
     let tenant_id = user.tenant_id;
     let project_name = req.project_name.clone();
     let workstream_types = req.workstreams.clone();
+    let billing_method = req.billing_method.clone();
 
     let (project, workstreams) = state
         .app_db
@@ -170,6 +183,7 @@ pub async fn convert_lead(
                     business_unit_id: Set(lead.business_unit_id),
                     client_id: Set(lead.client_id),
                     name: Set(project_name.clone()),
+                    billing_method: Set(billing_method.clone()),
                     created_at: Set(chrono::Utc::now().into()),
                 };
                 let project = project_am.insert(txn).await?;

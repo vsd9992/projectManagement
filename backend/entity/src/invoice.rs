@@ -1,9 +1,11 @@
 use sea_orm::entity::prelude::*;
 use rust_decimal::Decimal;
 
-/// Milestone-based billing only for now (the generic engine's other
-/// methods — progressive RA-style, lump-sum — aren't implemented yet; see
-/// the migration that created this table for why).
+/// Two billing methods: "milestone" (milestone_id set, certified_value_to_date
+/// NULL) and "progressive"/RA-bill-style (milestone_id NULL,
+/// certified_value_to_date set — the running cumulative certified value as
+/// of this bill; base_amount is the incremental delta since the prior bill).
+/// Enforced by the `invoices_method_shape` DB CHECK constraint.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize)]
 #[sea_orm(table_name = "invoices")]
 pub struct Model {
@@ -11,7 +13,9 @@ pub struct Model {
     pub id: Uuid,
     pub tenant_id: Uuid,
     pub project_id: Uuid,
-    pub milestone_id: Uuid,
+    pub milestone_id: Option<Uuid>,
+    pub billing_method: String,
+    pub certified_value_to_date: Option<Decimal>,
     pub base_amount: Decimal,
     pub retention_percent: Decimal,
     pub gst_amount: Decimal,

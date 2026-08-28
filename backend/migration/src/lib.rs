@@ -9,6 +9,7 @@ mod m20260828_000006_add_platform_and_tenant_admin;
 mod m20260828_000007_backfill_tenant_admin;
 mod m20260828_000008_add_change_order_workstreams;
 mod m20260828_000009_invoice_milestone_uniqueness;
+mod m20260828_000010_add_progressive_billing;
 
 pub struct Migrator;
 
@@ -25,6 +26,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260828_000007_backfill_tenant_admin::Migration),
             Box::new(m20260828_000008_add_change_order_workstreams::Migration),
             Box::new(m20260828_000009_invoice_milestone_uniqueness::Migration),
+            Box::new(m20260828_000010_add_progressive_billing::Migration),
         ]
     }
 }
