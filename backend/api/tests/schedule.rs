@@ -383,3 +383,202 @@ async fn schedule_task_date_shift_propagates_conditionally_to_dependents() {
     assert_eq!(c_task["planned_start_date"], "2026-09-20", "C has slack and should not shift: {:?}", c_task);
     assert_eq!(c_task["planned_end_date"], "2026-09-25");
 }
+
+#[tokio::test]
+async fn schedule_task_shift_creates_notifications_for_bu_team_and_tenant_admin() {
+    let app = spawn_app().await;
+    let (owner_cookie, _tenant_id, _owner_id) = signup(&app, "notiftest-owner").await;
+    let bu1 = create_business_unit(&app, &owner_cookie, "BU1").await;
+    let bu2 = create_business_unit(&app, &owner_cookie, "BU2").await;
+    let client_id = create_client(&app, &owner_cookie, "Acme").await;
+    let (teammate1_cookie, teammate1_id) =
+        create_and_login_teammate(&app, &owner_cookie, "notiftest-t1").await;
+    let (_teammate2_cookie, teammate2_id) =
+        create_and_login_teammate(&app, &owner_cookie, "notiftest-t2").await;
+    assign_role(&app, &owner_cookie, bu1, teammate1_id, "delivery").await;
+    assign_role(&app, &owner_cookie, bu2, teammate2_id, "delivery").await;
+
+    let project = create_project_with_workstreams(
+        &app,
+        &teammate1_cookie,
+        bu1,
+        client_id,
+        "Notif Test Project",
+        &["site_execution"],
+    )
+    .await;
+    assert_eq!(project.status, StatusCode::OK, "{:?}", project.json);
+    let project_id = project.json["id"].as_str().unwrap().to_string();
+
+    let a = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/schedule-tasks"),
+            Some(&teammate1_cookie),
+            json!({ "title": "A", "workstream_type": "site_execution" }),
+        )
+        .await
+        .json["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let b = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/schedule-tasks"),
+            Some(&teammate1_cookie),
+            json!({ "title": "B", "workstream_type": "site_execution" }),
+        )
+        .await
+        .json["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    app.call(
+        "POST",
+        &format!("/schedule-tasks/{b}/dependencies"),
+        Some(&teammate1_cookie),
+        json!({ "depends_on_task_id": a }),
+    )
+    .await;
+    app.call(
+        "POST",
+        &format!("/schedule-tasks/{a}/dates"),
+        Some(&teammate1_cookie),
+        json!({ "planned_start_date": "2026-11-01", "planned_end_date": "2026-11-05" }),
+    )
+    .await;
+    app.call(
+        "POST",
+        &format!("/schedule-tasks/{b}/dates"),
+        Some(&teammate1_cookie),
+        json!({ "planned_start_date": "2026-11-06", "planned_end_date": "2026-11-10" }),
+    )
+    .await;
+
+    let slip = app
+        .call(
+            "POST",
+            &format!("/schedule-tasks/{a}/dates"),
+            Some(&teammate1_cookie),
+            json!({
+                "planned_start_date": "2026-11-01", "planned_end_date": "2026-11-05",
+                "actual_start_date": "2026-11-01", "actual_end_date": "2026-11-08",
+            }),
+        )
+        .await;
+    assert_eq!(slip.status, StatusCode::OK, "{:?}", slip.json);
+    assert!(!slip.json["shifted_dependent_task_ids"].as_array().unwrap().is_empty());
+
+    // BU1 teammate (in the project's business unit) is notified.
+    let t1_notifs = app.call("GET", "/notifications", Some(&teammate1_cookie), json!({})).await;
+    assert_eq!(t1_notifs.status, StatusCode::OK);
+    let t1_list = t1_notifs.json.as_array().unwrap();
+    assert_eq!(t1_list.len(), 1, "{:?}", t1_list);
+    assert_eq!(t1_list[0]["schedule_task_id"].as_str().unwrap(), b);
+    assert_eq!(t1_list[0]["is_read"], false);
+
+    // Tenant admin (owner) is notified too.
+    let owner_notifs = app.call("GET", "/notifications", Some(&owner_cookie), json!({})).await;
+    assert_eq!(owner_notifs.json.as_array().unwrap().len(), 1);
+
+    // BU2 teammate (no role on this project's BU) is not notified.
+    let t2_notifs = app.call("GET", "/notifications", Some(&_teammate2_cookie), json!({})).await;
+    assert_eq!(t2_notifs.json.as_array().unwrap().len(), 0);
+
+    // Mark read + unread_only filtering.
+    let notif_id = t1_list[0]["id"].as_str().unwrap().to_string();
+    let marked = app
+        .call("POST", &format!("/notifications/{notif_id}/read"), Some(&teammate1_cookie), json!({}))
+        .await;
+    assert_eq!(marked.status, StatusCode::OK, "{:?}", marked.json);
+    assert_eq!(marked.json["is_read"], true);
+
+    let unread = app
+        .call("GET", "/notifications?unread_only=true", Some(&teammate1_cookie), json!({}))
+        .await;
+    assert_eq!(unread.json.as_array().unwrap().len(), 0, "{:?}", unread.json);
+}
+
+#[tokio::test]
+async fn already_started_schedule_task_shift_does_not_notify() {
+    let (app, _owner, cookie, project_id) = setup_project("notifstarted").await;
+
+    let a = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/schedule-tasks"),
+            Some(&cookie),
+            json!({ "title": "A", "workstream_type": "site_execution" }),
+        )
+        .await
+        .json["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let b = app
+        .call(
+            "POST",
+            &format!("/projects/{project_id}/schedule-tasks"),
+            Some(&cookie),
+            json!({ "title": "B", "workstream_type": "site_execution" }),
+        )
+        .await
+        .json["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    app.call(
+        "POST",
+        &format!("/schedule-tasks/{b}/dependencies"),
+        Some(&cookie),
+        json!({ "depends_on_task_id": a }),
+    )
+    .await;
+    app.call(
+        "POST",
+        &format!("/schedule-tasks/{a}/dates"),
+        Some(&cookie),
+        json!({ "planned_start_date": "2026-12-01", "planned_end_date": "2026-12-05" }),
+    )
+    .await;
+    // B has already started (actual_start_date set) — it should still
+    // shift (the algorithm doesn't skip shifting), but not notify.
+    app.call(
+        "POST",
+        &format!("/schedule-tasks/{b}/dates"),
+        Some(&cookie),
+        json!({
+            "planned_start_date": "2026-12-06", "planned_end_date": "2026-12-10",
+            "actual_start_date": "2026-12-06",
+        }),
+    )
+    .await;
+
+    let slip = app
+        .call(
+            "POST",
+            &format!("/schedule-tasks/{a}/dates"),
+            Some(&cookie),
+            json!({
+                "planned_start_date": "2026-12-01", "planned_end_date": "2026-12-05",
+                "actual_start_date": "2026-12-01", "actual_end_date": "2026-12-08",
+            }),
+        )
+        .await;
+    assert_eq!(slip.status, StatusCode::OK, "{:?}", slip.json);
+    assert_eq!(
+        slip.json["shifted_dependent_task_ids"].as_array().unwrap().len(),
+        1,
+        "B should still shift even though already started: {:?}",
+        slip.json
+    );
+
+    let notifs = app.call("GET", "/notifications", Some(&cookie), json!({})).await;
+    assert_eq!(
+        notifs.json.as_array().unwrap().len(),
+        0,
+        "an already-started task's shift should not notify: {:?}",
+        notifs.json
+    );
+}

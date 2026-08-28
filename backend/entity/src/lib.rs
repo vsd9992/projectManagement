@@ -12,6 +12,7 @@ pub mod design_revision;
 pub mod invoice;
 pub mod lead;
 pub mod milestone;
+pub mod notification;
 pub mod platform_admin;
 pub mod platform_admin_session;
 pub mod production_task;
@@ -48,6 +49,7 @@ pub mod prelude {
     pub use super::invoice::Entity as Invoice;
     pub use super::lead::Entity as Lead;
     pub use super::milestone::Entity as Milestone;
+    pub use super::notification::Entity as Notification;
     pub use super::platform_admin::Entity as PlatformAdmin;
     pub use super::platform_admin_session::Entity as PlatformAdminSession;
     pub use super::production_task::Entity as ProductionTask;

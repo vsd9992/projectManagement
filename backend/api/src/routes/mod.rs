@@ -7,6 +7,7 @@ mod clients;
 pub mod design;
 mod leads;
 mod manufacturing;
+mod notifications;
 mod platform;
 mod procurement;
 mod projects;
@@ -172,6 +173,14 @@ pub fn router() -> Router<AppState> {
             "/schedule-tasks/:id/dependencies",
             get(schedule::list_schedule_task_dependencies)
                 .post(schedule::add_schedule_task_dependency),
+        )
+        .route(
+            "/notifications",
+            get(notifications::list_my_notifications),
+        )
+        .route(
+            "/notifications/:id/read",
+            post(notifications::mark_notification_read),
         )
         .route(
             "/projects/:project_id/daily-logs",

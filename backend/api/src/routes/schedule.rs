@@ -279,6 +279,37 @@ pub async fn update_schedule_task_dates(
                         shifted =
                             propagate_shift(txn, tenant_id, user.user_id, task_id, delta_days)
                                 .await?;
+
+                        // Notify the project team about shifted tasks that
+                        // haven't started yet — a task already underway or
+                        // finished doesn't need a "your schedule moved"
+                        // alert. This *is* the significance threshold: a
+                        // task only appears in `shifted` when propagate_shift
+                        // actually moved it, not a separate heuristic.
+                        for shifted_id in &shifted {
+                            let shifted_task = entity::prelude::ScheduleTask::find_by_id(*shifted_id)
+                                .one(txn)
+                                .await?
+                                .ok_or(AppError::NotFound)?;
+                            if shifted_task.status != "done" && shifted_task.actual_start_date.is_none() {
+                                let message = format!(
+                                    "Schedule task '{}' shifted to start {} due to a dependency delay.",
+                                    shifted_task.title,
+                                    shifted_task
+                                        .planned_start_date
+                                        .map(|d| d.to_string())
+                                        .unwrap_or_else(|| "an unspecified date".to_string()),
+                                );
+                                crate::notifications::notify_project_team(
+                                    txn,
+                                    tenant_id,
+                                    updated.project_id,
+                                    *shifted_id,
+                                    &message,
+                                )
+                                .await?;
+                            }
+                        }
                     }
                 }
 
