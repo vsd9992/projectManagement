@@ -562,6 +562,38 @@ pub async fn approve_change_order(
     Ok(Json(model))
 }
 
+/// Read-only invoice visibility for the client — raising/marking-paid stays
+/// an internal Finance action (.ai/project/requirements.md).
+pub async fn list_project_invoices(
+    State(state): State<AppState>,
+    client: AuthenticatedClientUser,
+    Path(project_id): Path<Uuid>,
+) -> Result<Json<Vec<entity::invoice::Model>>, AppError> {
+    let tenant_id = client.tenant_id;
+    let items = state
+        .app_db
+        .transaction::<_, Vec<entity::invoice::Model>, AppError>(|txn| {
+            Box::pin(async move {
+                set_tenant(txn, tenant_id).await?;
+                let project = entity::prelude::Project::find_by_id(project_id)
+                    .one(txn)
+                    .await?
+                    .ok_or(AppError::NotFound)?;
+                if project.client_id != client.client_id {
+                    return Err(AppError::NotFound);
+                }
+                let items = entity::prelude::Invoice::find()
+                    .filter(entity::invoice::Column::ProjectId.eq(project_id))
+                    .all(txn)
+                    .await?;
+                Ok(items)
+            })
+        })
+        .await
+        .map_err(map_txn_err)?;
+    Ok(Json(items))
+}
+
 pub async fn reject_change_order(
     State(state): State<AppState>,
     client: AuthenticatedClientUser,

@@ -2,7 +2,7 @@
 
 **Project**: Multi-tenant PM SaaS for furniture manufacturing, turnkey interiors, and civil/architectural projects.
 **Phase**: Execution (Phase 2), MVP = Turnkey Interiors.
-**Milestone**: M1–M4 complete and verified against a live database on the dev server. M5 (Billing & Client Portal extensions) not started.
+**Milestone**: M1–M5 complete and verified against a live database on the dev server. M6 (MVP scenario verification) not started.
 **Active tasks**: None.
 
 ## Documents
@@ -12,7 +12,7 @@
 - `project/workflows.md` — project lifecycle, change-order flow, approvals, scenario walkthroughs
 - `project/roadmap.md` — phases, milestones, status
 - `project/risks.md` — active cross-cutting risks
-- `decisions/current/` — 6 foundational decisions (below)
+- `decisions/current/` — 14 decisions recorded (below)
 
 ## Decision pointers (current)
 - `multi-tenant-saas-product` — SaaS from day one, not internal tool
@@ -27,9 +27,10 @@
 - `api-contract-utoipa-orval-react-query` — utoipa OpenAPI spec + orval-generated client/React Query hooks
 - `hosting-dev-local-prod-kubernetes` — local dev server; production Kubernetes on Linode or E2E (TBD)
 - `client-portal-auth-pulled-into-m2` — Client Portal login/auth built in M2 (not deferred to M5) since design approval needs a real client actor
+- `no-rbac-enforcement-yet` — role data exists (user_business_unit_role) but nothing checks it yet; consistent gap across all workstreams, not Finance-specific
 
 ## Risk pointers
-See `project/risks.md` — 5 active risks (breadth-vs-depth, workstream over-engineering, billing engine India-correctness, traceability retrofit cost, UX-vs-entity-breadth). Multi-tenant isolation risk resolved via `tenant-isolation-shared-schema-rls`.
+See `project/risks.md` — 6 active risks (breadth-vs-depth, workstream over-engineering, billing engine India-correctness [GST/TDS/retention verified, mobilization advance still missing], traceability retrofit cost, UX-vs-entity-breadth, no RBAC enforcement). Multi-tenant isolation risk resolved via `tenant-isolation-shared-schema-rls`.
 
 ## History
 - 2026-08-27 — Baseline system design (entities, tenancy, workflow, MVP scope) established through planning discussion; six foundational decisions recorded; AGENTS.md/.ai/ structure bootstrapped.
@@ -42,3 +43,4 @@ See `project/risks.md` — 5 active risks (breadth-vs-depth, workstream over-eng
 - 2026-08-27 — M2 (Sales & Design workstream) built and verified: lead-to-project conversion, versioned quotations, versioned design revisions with real client-portal approve/reject, and cross-client isolation within a tenant — all confirmed against the live database, not just compiled.
 - 2026-08-28 — M3 (Change Orders) built and verified: quotation approve/reject (deferred from M2), Change Orders that add/modify/remove BOQ lines with a computed cost impact, client-approval-required re-baselining into a new quotation version, rejection leaving the baseline untouched, and audit_log showing explicit before/after for both outcomes. Schedule re-baselining explicitly deferred — no Schedule entity exists yet.
 - 2026-08-28 — M4 (Delivery workstreams) built and verified: vendors/POs tracked to delivered, site tasks with explicit dependency links, punch list raise/close, plus production tasks/daily logs/site queries — all internal-facing, all confirmed against the live database with audit_log counts matching exactly.
+- 2026-08-28 — M5 (Billing & Client Portal) built and verified: milestone-gated invoices via a pluggable IndiaGstProfile (GST 18% + GST TDS 2%), verified against independently hand-computed figures; mark-paid, client visibility, and cross-client isolation all confirmed. Recorded that no RBAC enforcement exists yet (consistent gap since M2, not Finance-specific) as an active risk.

@@ -1,5 +1,6 @@
 mod audit;
 mod auth;
+mod billing;
 mod config;
 mod db;
 mod error;

@@ -7,6 +7,9 @@ pub struct Model {
     pub id: Uuid,
     pub name: String,
     pub created_at: DateTimeWithTimeZone,
+    /// Which regional tax/billing rule profile this tenant uses. Only
+    /// "india" is implemented (see api::billing).
+    pub region_profile: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

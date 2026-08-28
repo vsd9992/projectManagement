@@ -79,6 +79,9 @@ pub async fn signup(
                     id: Set(tenant_id),
                     name: Set(tenant_name.clone()),
                     created_at: Set(chrono::Utc::now().into()),
+                    // Only "india" is implemented today (see api::billing);
+                    // hardcoded here until a second region profile exists.
+                    region_profile: Set("india".to_string()),
                 };
                 tenant.insert(txn).await?;
                 audit::record(

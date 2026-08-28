@@ -1,4 +1,5 @@
 mod auth;
+mod billing;
 mod business_units;
 mod change_orders;
 mod client_portal;
@@ -156,6 +157,24 @@ pub fn router() -> Router<AppState> {
         .route(
             "/site-queries/:id/answer",
             post(site_execution::answer_site_query),
+        )
+        // Billing.
+        .route(
+            "/projects/:project_id/milestones",
+            get(billing::list_milestones).post(billing::create_milestone),
+        )
+        .route(
+            "/milestones/:id/complete",
+            post(billing::complete_milestone),
+        )
+        .route(
+            "/projects/:project_id/invoices",
+            get(billing::list_invoices).post(billing::create_invoice),
+        )
+        .route("/invoices/:id/mark-paid", post(billing::mark_invoice_paid))
+        .route(
+            "/client/projects/:project_id/invoices",
+            get(client_portal::list_project_invoices),
         )
 }
 
