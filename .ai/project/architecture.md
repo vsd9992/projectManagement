@@ -1,4 +1,4 @@
-modified: 2026-08-28
+modified: 2026-08-29
 
 # Architecture
 
@@ -37,17 +37,17 @@ A project's enabled-workstream set is enforced, not just descriptive: the API re
 | Inventory / Material | Stock levels, raw materials, finished goods, movements |
 | Purchase Order, Vendor | Procurement, linked to BOQ/BOM line items (internal-facing only in MVP) |
 | Site Task, Daily Log, RFI, Punch List Item | Site execution records |
-| Schedule Task, Dependency, Milestone | Concurrent-capable scheduling; milestones drive billing |
-| Invoice / Billing Event | Generic engine — milestone, progressive (RA-bill-style), or lump-sum, driven by a pluggable Tax/Region Rule Profile (India profile implements GST SAC codes, TDS, mobilization-advance recovery, retention) |
-| Approval Workflow | Generic configurable approval chain, reused by Design approval, Change Orders (client-approval-required), and POs |
-| Document/Attachment | Generic versioned file entity attachable to any of the above |
+| Schedule Task, Dependency, Milestone | **Implemented (Phase 3)**: `schedule_tasks`/`schedule_task_dependencies` span all four workstreams, with planned/actual dates and basic forward-pass date-shift propagation on a dependency chain (deliberately not full CPM/critical-path scheduling). `Milestone` remains a separate, minimal entity that only exists to gate milestone-based billing — it isn't part of the schedule graph itself. |
+| Invoice / Billing Event | **Milestone and progressive (RA-bill-style) implemented (Phase 3 added progressive)**; lump-sum is not. Driven by a pluggable Tax/Region Rule Profile — India implements GST + GST TDS + retention. Mobilization-advance recovery is not implemented (see `risks.md` risk #3). |
+| Approval Workflow | **Not actually generic** — Design approval, Change Order approval, and (Phase 3) PO approval are each bespoke, hardcoded logic, not a shared configurable chain. Confirmed and deliberately left unbuilt during Phase 3 (see `risks.md` risk #8) rather than built half-generically. |
+| Document/Attachment | Not implemented as a generic entity — only `design_asset`/`design_revision` has versioned-document behavior, scoped to Design. |
 | Audit Log | Every state change on every entity above recorded (who/when/what/before→after) |
-| Comment/Notification | Threaded communication tied to any entity — addresses coordination fragmentation |
+| Comment/Notification | **Partially implemented (Phase 3)**: in-app `notifications` exist for one specific case — schedule-task date shifts, addressed to the project's internal team. Not the generic "threaded communication tied to any entity" this row originally described; that remains unbuilt. |
 
 ## Cross-Cutting Principles
 - **Traceability by construction**: audit logging and document versioning are core platform services every entity plugs into, not per-module bolt-ons.
 - **Transparency by role**: dashboards are filtered views over the same underlying data — internal roles see full detail scoped to their business unit/workstream; the Client Portal is a curated read/approve subset (design approvals, progress, milestone invoices) of their own project only.
-- **Tenant-level configurability**: approval chains, billing/tax rule profile, and workstream labels are configuration, not code — so onboarding a new tenant or region doesn't require a redeploy (composable, per the IFS Cloud vs. SAP lesson in the market research).
+- **Tenant-level configurability**: billing/tax rule profile and workstream labels are configuration via `GET/POST /tenant-settings` (Phase 3), not code — so onboarding a new tenant or region doesn't require a redeploy. Approval chains are **not** configurable yet (see `risks.md` risk #8) — the original composable-per-tenant ambition (per the IFS Cloud vs. SAP lesson in the market research) is only partially realized.
 - **Generic billing engine**: billing method (milestone / progressive RA-style / lump-sum) and tax rules are abstracted behind a Region Rule Profile; India is the first concrete profile, built to be one of several, not hardcoded into the core.
 
 ## Technology Stack
