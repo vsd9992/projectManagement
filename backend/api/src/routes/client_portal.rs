@@ -377,7 +377,13 @@ async fn decide_change_order(
 
                 if approve {
                     new_quotation_id = Some(
-                        apply_change_order(txn, tenant_id, &change_order).await?,
+                        apply_change_order(
+                            txn,
+                            tenant_id,
+                            &change_order,
+                            audit::Actor::ClientUser(client.client_user_id),
+                        )
+                        .await?,
                     );
                 }
 
@@ -422,6 +428,7 @@ async fn apply_change_order(
     txn: &sea_orm::DatabaseTransaction,
     tenant_id: Uuid,
     change_order: &entity::change_order::Model,
+    actor: audit::Actor,
 ) -> Result<Uuid, AppError> {
     let co_line_items = entity::prelude::ChangeOrderLineItem::find()
         .filter(entity::change_order_line_item::Column::ChangeOrderId.eq(change_order.id))
@@ -462,7 +469,7 @@ async fn apply_change_order(
         "quotation",
         new_quotation_id,
         "create",
-        audit::Actor::System,
+        actor,
         None,
         Some(serde_json::json!({
             "project_id": change_order.project_id,
@@ -483,6 +490,7 @@ async fn apply_change_order(
             &base.unit,
             base.unit_rate,
             base.amount,
+            actor,
         )
         .await?;
     }
@@ -498,6 +506,7 @@ async fn apply_change_order(
             &li.unit,
             li.unit_rate,
             li.amount,
+            actor,
         )
         .await?;
     }
@@ -507,7 +516,7 @@ async fn apply_change_order(
         tenant_id,
         change_order.project_id,
         new_quotation_id,
-        audit::Actor::System,
+        actor,
     )
     .await?;
 
@@ -524,6 +533,7 @@ async fn insert_baseline_line(
     unit: &str,
     unit_rate: rust_decimal::Decimal,
     amount: rust_decimal::Decimal,
+    actor: audit::Actor,
 ) -> Result<(), AppError> {
     let id = Uuid::new_v4();
     let am = entity::quotation_line_item::ActiveModel {
@@ -544,7 +554,7 @@ async fn insert_baseline_line(
         "quotation_line_item",
         id,
         "create",
-        audit::Actor::System,
+        actor,
         None,
         Some(serde_json::json!({ "quotation_id": quotation_id, "description": description, "amount": amount })),
     )

@@ -2,8 +2,9 @@ use axum::{
     extract::{Path, State},
     Json,
 };
+use entity::workstream_type::WorkstreamType;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
@@ -106,6 +107,19 @@ pub async fn list_leads(
 #[derive(Deserialize)]
 pub struct ConvertLeadRequest {
     pub project_name: String,
+    /// Same requirement as direct project creation: an arbitrary, non-empty
+    /// subset of the workstream catalog. Found missing during M6 scenario
+    /// verification — conversion previously produced a project with zero
+    /// enabled workstreams (no validation caught it, since project creation
+    /// itself is the only place "at least one workstream" was enforced).
+    pub workstreams: Vec<WorkstreamType>,
+}
+
+#[derive(Serialize)]
+pub struct ConvertedProjectResponse {
+    #[serde(flatten)]
+    pub project: entity::project::Model,
+    pub workstreams: Vec<entity::project_workstream::Model>,
 }
 
 /// Converts a lead into a Project (using the lead's business unit + client)
@@ -115,16 +129,22 @@ pub async fn convert_lead(
     user: AuthenticatedUser,
     Path(lead_id): Path<Uuid>,
     Json(req): Json<ConvertLeadRequest>,
-) -> Result<Json<entity::project::Model>, AppError> {
+) -> Result<Json<ConvertedProjectResponse>, AppError> {
     if req.project_name.trim().is_empty() {
         return Err(AppError::BadRequest("project_name is required".into()));
     }
+    if req.workstreams.is_empty() {
+        return Err(AppError::BadRequest(
+            "at least one workstream must be enabled".into(),
+        ));
+    }
     let tenant_id = user.tenant_id;
     let project_name = req.project_name.clone();
+    let workstream_types = req.workstreams.clone();
 
-    let project = state
+    let (project, workstreams) = state
         .app_db
-        .transaction::<_, entity::project::Model, AppError>(|txn| {
+        .transaction::<_, (entity::project::Model, Vec<entity::project_workstream::Model>), AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
 
@@ -161,9 +181,39 @@ pub async fn convert_lead(
                     "create",
                     audit::Actor::User(user.user_id),
                     None,
-                    Some(serde_json::json!({ "name": project_name, "converted_from_lead": lead_id })),
+                    Some(serde_json::json!({
+                        "name": project_name,
+                        "converted_from_lead": lead_id,
+                        "workstreams": workstream_types,
+                    })),
                 )
                 .await?;
+
+                let mut workstreams = Vec::with_capacity(workstream_types.len());
+                for wt in workstream_types {
+                    let ws_id = Uuid::new_v4();
+                    let ws_am = entity::project_workstream::ActiveModel {
+                        id: Set(ws_id),
+                        tenant_id: Set(tenant_id),
+                        project_id: Set(project_id),
+                        workstream_type: Set(wt.clone()),
+                        status: Set("not_started".to_string()),
+                        created_at: Set(chrono::Utc::now().into()),
+                    };
+                    let ws_model = ws_am.insert(txn).await?;
+                    audit::record(
+                        txn,
+                        tenant_id,
+                        "project_workstream",
+                        ws_id,
+                        "create",
+                        audit::Actor::User(user.user_id),
+                        None,
+                        Some(serde_json::json!({ "project_id": project_id, "workstream_type": wt })),
+                    )
+                    .await?;
+                    workstreams.push(ws_model);
+                }
 
                 let mut lead_am: entity::lead::ActiveModel = lead.into();
                 lead_am.status = Set("converted".to_string());
@@ -181,11 +231,14 @@ pub async fn convert_lead(
                 )
                 .await?;
 
-                Ok(project)
+                Ok((project, workstreams))
             })
         })
         .await
         .map_err(map_txn_err)?;
 
-    Ok(Json(project))
+    Ok(Json(ConvertedProjectResponse {
+        project,
+        workstreams,
+    }))
 }
