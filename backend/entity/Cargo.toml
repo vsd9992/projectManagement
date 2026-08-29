@@ -9,3 +9,4 @@ serde.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 rust_decimal.workspace = true
+utoipa = { version = "4", features = ["uuid", "chrono", "decimal"] }

@@ -4,7 +4,7 @@ use sea_orm::entity::prelude::*;
 /// tenant (pause/resume/delete lifecycle only, no access to tenant business
 /// data). No RLS: there's no tenant_id to scope by. Enforcement is that
 /// only routes::platform ever queries this table.
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 #[sea_orm(table_name = "platform_admins")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]

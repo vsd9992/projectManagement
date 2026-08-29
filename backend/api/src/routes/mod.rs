@@ -1,20 +1,20 @@
-mod auth;
-mod billing;
-mod business_units;
-mod change_orders;
-mod client_portal;
-mod clients;
+pub(crate) mod auth;
+pub(crate) mod billing;
+pub(crate) mod business_units;
+pub(crate) mod change_orders;
+pub(crate) mod client_portal;
+pub(crate) mod clients;
 pub mod design;
-mod leads;
-mod manufacturing;
-mod notifications;
-mod platform;
-mod procurement;
-mod projects;
-mod quotations;
-mod schedule;
-mod site_execution;
-mod tenant_settings;
+pub(crate) mod leads;
+pub(crate) mod manufacturing;
+pub(crate) mod notifications;
+pub(crate) mod platform;
+pub(crate) mod procurement;
+pub(crate) mod projects;
+pub(crate) mod quotations;
+pub(crate) mod schedule;
+pub(crate) mod site_execution;
+pub(crate) mod tenant_settings;
 
 use axum::{
     routing::{get, post},
@@ -30,6 +30,7 @@ pub fn router() -> Router<AppState> {
         .route("/auth/login", post(auth::login))
         .route("/auth/client-login", post(auth::client_login))
         .route("/auth/logout", post(auth::logout))
+        .route("/auth/me", get(auth::me))
         .route("/users", post(auth::create_teammate))
         .route(
             "/users/:id/revoke-sessions",

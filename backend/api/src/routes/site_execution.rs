@@ -19,12 +19,12 @@ use crate::{
 
 const TASK_STATUSES: [&str; 3] = ["not_started", "in_progress", "done"];
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateSiteTaskRequest {
     pub title: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct SiteTaskResponse {
     #[serde(flatten)]
     pub task: entity::site_task::Model,
@@ -34,6 +34,19 @@ pub struct SiteTaskResponse {
     pub schedule_task_id: Uuid,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/projects/{project_id}/site-tasks",
+    tag = "site_execution",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    request_body = CreateSiteTaskRequest,
+    responses(
+        (status = 200, description = "Site task created (with linked schedule task)", body = SiteTaskResponse),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_site_task(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -132,6 +145,17 @@ pub async fn create_site_task(
     Ok(Json(SiteTaskResponse { task, schedule_task_id }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/projects/{project_id}/site-tasks",
+    tag = "site_execution",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "List site tasks", body = Vec<entity::site_task::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_site_tasks(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -162,11 +186,26 @@ pub async fn list_site_tasks(
     Ok(Json(items))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
+#[schema(as = SiteTaskUpdateStatusRequest)]
 pub struct UpdateStatusRequest {
     pub status: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/site-tasks/{id}/status",
+    tag = "site_execution",
+    params(("id" = Uuid, Path, description = "Site task id")),
+    request_body = UpdateStatusRequest,
+    responses(
+        (status = 200, description = "Status updated (kept in sync on the linked schedule task)", body = entity::site_task::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn update_site_task_status(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -256,12 +295,25 @@ pub async fn update_site_task_status(
 
 // ---- Daily Logs ----
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateDailyLogRequest {
     pub log_date: chrono::NaiveDate,
     pub notes: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/projects/{project_id}/daily-logs",
+    tag = "site_execution",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    request_body = CreateDailyLogRequest,
+    responses(
+        (status = 200, description = "Daily log created", body = entity::daily_log::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_daily_log(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -322,6 +374,17 @@ pub async fn create_daily_log(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/projects/{project_id}/daily-logs",
+    tag = "site_execution",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "List daily logs", body = Vec<entity::daily_log::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_daily_logs(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -354,11 +417,24 @@ pub async fn list_daily_logs(
 
 // ---- Punch List ----
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreatePunchListItemRequest {
     pub description: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/projects/{project_id}/punch-list",
+    tag = "site_execution",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    request_body = CreatePunchListItemRequest,
+    responses(
+        (status = 200, description = "Punch list item raised", body = entity::punch_list_item::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_punch_list_item(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -421,6 +497,17 @@ pub async fn create_punch_list_item(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/projects/{project_id}/punch-list",
+    tag = "site_execution",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "List punch list items", body = Vec<entity::punch_list_item::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_punch_list_items(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -451,6 +538,19 @@ pub async fn list_punch_list_items(
     Ok(Json(items))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/punch-list/{id}/close",
+    tag = "site_execution",
+    params(("id" = Uuid, Path, description = "Punch list item id")),
+    responses(
+        (status = 200, description = "Punch list item closed", body = entity::punch_list_item::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn close_punch_list_item(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -503,12 +603,25 @@ pub async fn close_punch_list_item(
 
 // ---- Site Queries (basic RFI log) ----
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateSiteQueryRequest {
     pub subject: String,
     pub question: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/projects/{project_id}/site-queries",
+    tag = "site_execution",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    request_body = CreateSiteQueryRequest,
+    responses(
+        (status = 200, description = "Site query raised", body = entity::site_query::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_site_query(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -573,6 +686,17 @@ pub async fn create_site_query(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/projects/{project_id}/site-queries",
+    tag = "site_execution",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "List site queries", body = Vec<entity::site_query::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_site_queries(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -603,11 +727,25 @@ pub async fn list_site_queries(
     Ok(Json(items))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct AnswerSiteQueryRequest {
     pub answer: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/site-queries/{id}/answer",
+    tag = "site_execution",
+    params(("id" = Uuid, Path, description = "Site query id")),
+    request_body = AnswerSiteQueryRequest,
+    responses(
+        (status = 200, description = "Site query answered", body = entity::site_query::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn answer_site_query(
     State(state): State<AppState>,
     user: AuthenticatedUser,

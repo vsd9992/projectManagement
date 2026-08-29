@@ -17,7 +17,7 @@ use crate::{
     state::AppState,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct ChangeLineItemInput {
     /// None = a newly added line (scope extension). Some = this line item in
     /// the base quotation is being modified or removed (scope reduction/change).
@@ -30,7 +30,7 @@ pub struct ChangeLineItemInput {
     pub unit_rate: Decimal,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateChangeOrderRequest {
     pub base_quotation_id: Uuid,
     pub title: String,
@@ -55,7 +55,7 @@ pub struct CreateChangeOrderRequest {
     pub add_schedule_tasks: Vec<NewScheduleTaskInput>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct NewScheduleTaskInput {
     pub title: String,
     pub workstream_type: entity::workstream_type::WorkstreamType,
@@ -67,7 +67,7 @@ pub struct NewScheduleTaskInput {
     pub depends_on_existing_task_id: Option<Uuid>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct ChangeOrderResponse {
     #[serde(flatten)]
     pub change_order: entity::change_order::Model,
@@ -80,6 +80,19 @@ pub struct ChangeOrderResponse {
 /// It is not binding until the client approves it via the Client Portal
 /// (.ai/decisions/current/2026-08-27-change-order-requires-client-approval.md)
 /// — this endpoint only records the proposal and its computed cost impact.
+#[utoipa::path(
+    post,
+    path = "/api/projects/{project_id}/change-orders",
+    tag = "change_orders",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    request_body = CreateChangeOrderRequest,
+    responses(
+        (status = 200, description = "Change order proposed", body = ChangeOrderResponse),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_change_order(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -340,6 +353,17 @@ pub async fn create_change_order(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/projects/{project_id}/change-orders",
+    tag = "change_orders",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "List change orders", body = Vec<entity::change_order::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_change_orders(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -370,6 +394,18 @@ pub async fn list_change_orders(
     Ok(Json(items))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/change-orders/{id}",
+    tag = "change_orders",
+    params(("id" = Uuid, Path, description = "Change order id")),
+    responses(
+        (status = 200, description = "Change order detail", body = ChangeOrderResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn get_change_order(
     State(state): State<AppState>,
     user: AuthenticatedUser,

@@ -2,7 +2,7 @@ use sea_orm::entity::prelude::*;
 
 /// In-app only (no email/SMS integration exists in this app yet) — see
 /// .ai/decisions/current/2026-08-28-phase-3-audit-and-expansion.md.
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 #[sea_orm(table_name = "notifications")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]

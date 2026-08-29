@@ -17,12 +17,22 @@ use crate::{
 /// entity architecture.md describes — a separate, comparably-sized
 /// undertaking. See .ai/decisions/current/
 /// 2026-08-28-phase-3-audit-and-expansion.md.
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct TenantSettingsResponse {
     pub region_profile: String,
     pub workstream_labels: serde_json::Value,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/tenant-settings",
+    tag = "tenant_settings",
+    responses(
+        (status = 200, description = "Tenant settings", body = TenantSettingsResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn get_tenant_settings(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -47,12 +57,25 @@ pub async fn get_tenant_settings(
     }))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct UpdateTenantSettingsRequest {
     pub region_profile: Option<String>,
     pub workstream_labels: Option<serde_json::Value>,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/tenant-settings",
+    tag = "tenant_settings",
+    request_body = UpdateTenantSettingsRequest,
+    responses(
+        (status = 200, description = "Tenant settings updated", body = TenantSettingsResponse),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn update_tenant_settings(
     State(state): State<AppState>,
     user: AuthenticatedUser,

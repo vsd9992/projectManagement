@@ -16,13 +16,25 @@ use crate::{
     state::AppState,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateLeadRequest {
     pub business_unit_id: Uuid,
     pub client_id: Uuid,
     pub title: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/leads",
+    tag = "leads",
+    request_body = CreateLeadRequest,
+    responses(
+        (status = 200, description = "Lead created", body = entity::lead::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_lead(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -80,6 +92,15 @@ pub async fn create_lead(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/leads",
+    tag = "leads",
+    responses(
+        (status = 200, description = "List leads", body = Vec<entity::lead::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_leads(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -104,7 +125,7 @@ pub async fn list_leads(
     Ok(Json(items))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct ConvertLeadRequest {
     pub project_name: String,
     /// Same requirement as direct project creation: an arbitrary, non-empty
@@ -122,7 +143,7 @@ fn default_billing_method() -> String {
     "milestone".to_string()
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct ConvertedProjectResponse {
     #[serde(flatten)]
     pub project: entity::project::Model,
@@ -131,6 +152,20 @@ pub struct ConvertedProjectResponse {
 
 /// Converts a lead into a Project (using the lead's business unit + client)
 /// and marks the lead converted, in one transaction.
+#[utoipa::path(
+    post,
+    path = "/api/leads/{id}/convert",
+    tag = "leads",
+    params(("id" = Uuid, Path, description = "Lead id")),
+    request_body = ConvertLeadRequest,
+    responses(
+        (status = 200, description = "Lead converted to project", body = ConvertedProjectResponse),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn convert_lead(
     State(state): State<AppState>,
     user: AuthenticatedUser,

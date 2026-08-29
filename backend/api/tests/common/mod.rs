@@ -36,6 +36,8 @@ pub async fn spawn_app() -> TestApp {
         router: build_app(AppState {
             app_db,
             admin_db: admin_db.clone(),
+            cookie_secure: false,
+            cors_origin: "http://localhost:5173".to_string(),
         }),
         admin_db,
     }
@@ -89,9 +91,13 @@ impl TestApp {
         cookie_header: Option<&str>,
         body: Value,
     ) -> TestResponse {
+        // Every route now lives under /api (see lib.rs::build_app) — tests
+        // were written against the pre-Stage-3 unprefixed paths, so prefix
+        // here rather than touching every call site across every test file.
+        let uri = format!("/api{path}");
         let mut builder = Request::builder()
             .method(method)
-            .uri(path)
+            .uri(uri)
             .header("content-type", "application/json");
         if let Some(c) = cookie_header {
             builder = builder.header("cookie", c.to_string());

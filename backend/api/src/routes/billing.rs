@@ -18,11 +18,24 @@ use crate::{
 
 // ---- Milestones ----
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateMilestoneRequest {
     pub title: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/projects/{project_id}/milestones",
+    tag = "billing",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    request_body = CreateMilestoneRequest,
+    responses(
+        (status = 200, description = "Milestone created", body = entity::milestone::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_milestone(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -73,6 +86,17 @@ pub async fn create_milestone(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/projects/{project_id}/milestones",
+    tag = "billing",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "List milestones", body = Vec<entity::milestone::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_milestones(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -98,6 +122,19 @@ pub async fn list_milestones(
     Ok(Json(items))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/milestones/{id}/complete",
+    tag = "billing",
+    params(("id" = Uuid, Path, description = "Milestone id")),
+    responses(
+        (status = 200, description = "Milestone marked completed", body = entity::milestone::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn complete_milestone(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -144,7 +181,7 @@ pub async fn complete_milestone(
 
 // ---- Invoices ----
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateInvoiceRequest {
     /// "milestone" (default) or "progressive" — see .ai/decisions/current/
     /// 2026-08-28-phase-3-audit-and-expansion.md.
@@ -173,6 +210,20 @@ fn default_billing_method() -> String {
 /// `billing::calculate_invoice` is shared, method-agnostic math. See
 /// api::billing for the calculation and why mobilization-advance recovery
 /// isn't included yet.
+#[utoipa::path(
+    post,
+    path = "/api/projects/{project_id}/invoices",
+    tag = "billing",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    request_body = CreateInvoiceRequest,
+    responses(
+        (status = 200, description = "Invoice raised", body = entity::invoice::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_invoice(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -335,6 +386,17 @@ pub async fn create_invoice(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/projects/{project_id}/invoices",
+    tag = "billing",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "List invoices", body = Vec<entity::invoice::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_invoices(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -365,6 +427,19 @@ pub async fn list_invoices(
     Ok(Json(items))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/invoices/{id}/mark-paid",
+    tag = "billing",
+    params(("id" = Uuid, Path, description = "Invoice id")),
+    responses(
+        (status = 200, description = "Invoice marked paid", body = entity::invoice::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn mark_invoice_paid(
     State(state): State<AppState>,
     user: AuthenticatedUser,

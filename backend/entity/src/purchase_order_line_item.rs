@@ -1,7 +1,7 @@
 use sea_orm::entity::prelude::*;
 use rust_decimal::Decimal;
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 #[sea_orm(table_name = "purchase_order_line_items")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]

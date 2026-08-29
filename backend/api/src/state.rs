@@ -8,4 +8,10 @@ pub struct AppState {
     /// yet (login-time lookup by email) or for future platform-admin tooling.
     /// Never used for ordinary request handling.
     pub admin_db: DatabaseConnection,
+    /// Whether session cookies carry the `Secure` flag — see
+    /// `config::AppConfig::cookie_secure`.
+    pub cookie_secure: bool,
+    /// Allowed CORS origin for the frontend dev server — see
+    /// `config::AppConfig::cors_origin`.
+    pub cors_origin: String,
 }

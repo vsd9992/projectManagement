@@ -15,11 +15,24 @@ use crate::{
     state::AppState,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateDesignAssetRequest {
     pub title: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/projects/{project_id}/design-assets",
+    tag = "design",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    request_body = CreateDesignAssetRequest,
+    responses(
+        (status = 200, description = "Design asset created", body = entity::design_asset::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_design_asset(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -79,6 +92,17 @@ pub async fn create_design_asset(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/projects/{project_id}/design-assets",
+    tag = "design",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "List design assets", body = Vec<entity::design_asset::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_design_assets(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -109,7 +133,7 @@ pub async fn list_design_assets(
     Ok(Json(items))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct SubmitRevisionRequest {
     pub notes: Option<String>,
 }
@@ -117,6 +141,19 @@ pub struct SubmitRevisionRequest {
 /// Submits a new versioned revision under a design asset. Starts life as
 /// "submitted" — client approval/rejection is a separate action via the
 /// Client Portal endpoints, not something the submitting internal user sets.
+#[utoipa::path(
+    post,
+    path = "/api/design-assets/{id}/revisions",
+    tag = "design",
+    params(("id" = Uuid, Path, description = "Design asset id")),
+    request_body = SubmitRevisionRequest,
+    responses(
+        (status = 200, description = "Revision submitted", body = entity::design_revision::Model),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn submit_design_revision(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -186,6 +223,18 @@ pub async fn submit_design_revision(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/design-assets/{id}/revisions",
+    tag = "design",
+    params(("id" = Uuid, Path, description = "Design asset id")),
+    responses(
+        (status = 200, description = "List design revisions", body = Vec<entity::design_revision::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_design_revisions(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -221,7 +270,7 @@ pub async fn list_design_revisions(
     Ok(Json(items))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct DesignAssetWithRevisions {
     #[serde(flatten)]
     pub asset: entity::design_asset::Model,

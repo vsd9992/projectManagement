@@ -22,6 +22,15 @@ use crate::{
 /// alone would return every project in the tenant, so this filter is what
 /// actually keeps a client scoped to their own data (see
 /// .ai/decisions/current/2026-08-27-auth-session-based-single-login.md).
+#[utoipa::path(
+    get,
+    path = "/api/client/projects",
+    tag = "client_portal",
+    responses(
+        (status = 200, description = "List my projects", body = Vec<entity::project::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_my_projects(
     State(state): State<AppState>,
     client: AuthenticatedClientUser,
@@ -44,6 +53,17 @@ pub async fn list_my_projects(
     Ok(Json(items))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/client/projects/{project_id}/design-assets",
+    tag = "client_portal",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "Design assets with their revisions", body = Vec<DesignAssetWithRevisions>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_project_design_assets(
     State(state): State<AppState>,
     client: AuthenticatedClientUser,
@@ -85,7 +105,7 @@ pub async fn list_project_design_assets(
     Ok(Json(items))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct DecisionRequest {
     pub notes: Option<String>,
 }
@@ -156,6 +176,19 @@ async fn decide_revision(
         .map_err(map_txn_err)
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/client/design-revisions/{id}/approve",
+    tag = "client_portal",
+    params(("id" = Uuid, Path, description = "Design revision id")),
+    request_body = DecisionRequest,
+    responses(
+        (status = 200, description = "Revision approved", body = entity::design_revision::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn approve_design_revision(
     State(state): State<AppState>,
     client: AuthenticatedClientUser,
@@ -166,6 +199,19 @@ pub async fn approve_design_revision(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/client/design-revisions/{id}/reject",
+    tag = "client_portal",
+    params(("id" = Uuid, Path, description = "Design revision id")),
+    request_body = DecisionRequest,
+    responses(
+        (status = 200, description = "Revision rejected", body = entity::design_revision::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn reject_design_revision(
     State(state): State<AppState>,
     client: AuthenticatedClientUser,
@@ -284,6 +330,19 @@ async fn decide_quotation(
         .map_err(map_txn_err)
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/client/quotations/{id}/approve",
+    tag = "client_portal",
+    params(("id" = Uuid, Path, description = "Quotation id")),
+    request_body = DecisionRequest,
+    responses(
+        (status = 200, description = "Quotation approved (supersedes any other non-terminal quotation)", body = entity::quotation::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn approve_quotation(
     State(state): State<AppState>,
     client: AuthenticatedClientUser,
@@ -294,6 +353,19 @@ pub async fn approve_quotation(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/client/quotations/{id}/reject",
+    tag = "client_portal",
+    params(("id" = Uuid, Path, description = "Quotation id")),
+    request_body = DecisionRequest,
+    responses(
+        (status = 200, description = "Quotation rejected", body = entity::quotation::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn reject_quotation(
     State(state): State<AppState>,
     client: AuthenticatedClientUser,
@@ -304,6 +376,17 @@ pub async fn reject_quotation(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/client/projects/{project_id}/change-orders",
+    tag = "client_portal",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "List change orders for my project", body = Vec<entity::change_order::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_my_change_orders(
     State(state): State<AppState>,
     client: AuthenticatedClientUser,
@@ -709,6 +792,19 @@ async fn insert_baseline_line(
     Ok(())
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/client/change-orders/{id}/approve",
+    tag = "client_portal",
+    params(("id" = Uuid, Path, description = "Change order id")),
+    request_body = DecisionRequest,
+    responses(
+        (status = 200, description = "Change order approved (re-baselines BOQ / enables workstreams / spawns schedule tasks)", body = entity::change_order::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn approve_change_order(
     State(state): State<AppState>,
     client: AuthenticatedClientUser,
@@ -721,6 +817,17 @@ pub async fn approve_change_order(
 
 /// Read-only invoice visibility for the client — raising/marking-paid stays
 /// an internal Finance action (.ai/project/requirements.md).
+#[utoipa::path(
+    get,
+    path = "/api/client/projects/{project_id}/invoices",
+    tag = "client_portal",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "List invoices for my project", body = Vec<entity::invoice::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_project_invoices(
     State(state): State<AppState>,
     client: AuthenticatedClientUser,
@@ -751,6 +858,19 @@ pub async fn list_project_invoices(
     Ok(Json(items))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/client/change-orders/{id}/reject",
+    tag = "client_portal",
+    params(("id" = Uuid, Path, description = "Change order id")),
+    request_body = DecisionRequest,
+    responses(
+        (status = 200, description = "Change order rejected (no side effects)", body = entity::change_order::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn reject_change_order(
     State(state): State<AppState>,
     client: AuthenticatedClientUser,

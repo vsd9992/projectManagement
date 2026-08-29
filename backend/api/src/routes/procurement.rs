@@ -16,13 +16,25 @@ use crate::{
     state::AppState,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateVendorRequest {
     pub name: String,
     pub contact_email: Option<String>,
     pub contact_phone: Option<String>,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/vendors",
+    tag = "procurement",
+    request_body = CreateVendorRequest,
+    responses(
+        (status = 200, description = "Vendor created", body = entity::vendor::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_vendor(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -69,6 +81,16 @@ pub async fn create_vendor(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/vendors",
+    tag = "procurement",
+    responses(
+        (status = 200, description = "List vendors", body = Vec<entity::vendor::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_vendors(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -88,7 +110,7 @@ pub async fn list_vendors(
     Ok(Json(items))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct PoLineItemInput {
     pub quotation_line_item_id: Option<Uuid>,
     pub description: String,
@@ -97,20 +119,33 @@ pub struct PoLineItemInput {
     pub unit_rate: Decimal,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreatePurchaseOrderRequest {
     pub vendor_id: Uuid,
     pub title: String,
     pub line_items: Vec<PoLineItemInput>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct PurchaseOrderResponse {
     #[serde(flatten)]
     pub purchase_order: entity::purchase_order::Model,
     pub line_items: Vec<entity::purchase_order_line_item::Model>,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/projects/{project_id}/purchase-orders",
+    tag = "procurement",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    request_body = CreatePurchaseOrderRequest,
+    responses(
+        (status = 200, description = "Purchase order created (pending_approval)", body = PurchaseOrderResponse),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_purchase_order(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -223,6 +258,17 @@ pub async fn create_purchase_order(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/projects/{project_id}/purchase-orders",
+    tag = "procurement",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "List purchase orders", body = Vec<entity::purchase_order::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_purchase_orders(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -253,7 +299,7 @@ pub async fn list_purchase_orders(
     Ok(Json(items))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct PoDecisionRequest {
     pub notes: Option<String>,
 }
@@ -320,6 +366,20 @@ async fn decide_purchase_order(
 /// current catalog, so this is gated by the same `delivery` role that
 /// creates a PO — matching how this app doesn't otherwise separate
 /// creator/approver roles anywhere internal.
+#[utoipa::path(
+    post,
+    path = "/api/purchase-orders/{id}/approve",
+    tag = "procurement",
+    params(("id" = Uuid, Path, description = "Purchase order id")),
+    request_body = PoDecisionRequest,
+    responses(
+        (status = 200, description = "Purchase order approved (now open)", body = entity::purchase_order::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn approve_purchase_order(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -330,6 +390,20 @@ pub async fn approve_purchase_order(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/purchase-orders/{id}/reject",
+    tag = "procurement",
+    params(("id" = Uuid, Path, description = "Purchase order id")),
+    request_body = PoDecisionRequest,
+    responses(
+        (status = 200, description = "Purchase order rejected (terminal)", body = entity::purchase_order::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn reject_purchase_order(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -340,6 +414,19 @@ pub async fn reject_purchase_order(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/purchase-orders/{id}/deliver",
+    tag = "procurement",
+    params(("id" = Uuid, Path, description = "Purchase order id")),
+    responses(
+        (status = 200, description = "Purchase order marked delivered", body = entity::purchase_order::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn mark_purchase_order_delivered(
     State(state): State<AppState>,
     user: AuthenticatedUser,

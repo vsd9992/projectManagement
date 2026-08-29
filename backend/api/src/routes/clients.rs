@@ -15,11 +15,23 @@ use crate::{
     state::AppState,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateClientRequest {
     pub name: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/clients",
+    tag = "clients",
+    request_body = CreateClientRequest,
+    responses(
+        (status = 200, description = "Client created", body = entity::client::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_client(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -65,7 +77,7 @@ pub async fn create_client(
     Ok(Json(model))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateClientUserRequest {
     pub email: String,
     pub password: String,
@@ -75,6 +87,20 @@ pub struct CreateClientUserRequest {
 /// authenticated: for now an internal Sales/Design user sets the initial
 /// password directly rather than an email-invite flow, which is out of
 /// scope for this milestone.
+#[utoipa::path(
+    post,
+    path = "/api/clients/{client_id}/users",
+    tag = "clients",
+    params(("client_id" = Uuid, Path, description = "Client id")),
+    request_body = CreateClientUserRequest,
+    responses(
+        (status = 200, description = "Client Portal login created", body = entity::client_user::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_client_user(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -139,6 +165,16 @@ pub async fn create_client_user(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/clients",
+    tag = "clients",
+    responses(
+        (status = 200, description = "List clients", body = Vec<entity::client::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_clients(
     State(state): State<AppState>,
     user: AuthenticatedUser,

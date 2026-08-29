@@ -2,7 +2,7 @@ use sea_orm::entity::prelude::*;
 
 /// Deliberately separate from the tenant `sessions` table — see
 /// platform_admin.rs and the migration that created this table for why.
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 #[sea_orm(table_name = "platform_admin_sessions")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]

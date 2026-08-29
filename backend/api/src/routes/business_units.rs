@@ -15,7 +15,7 @@ use crate::{
     state::AppState,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateBusinessUnitRequest {
     pub name: String,
 }
@@ -23,6 +23,18 @@ pub struct CreateBusinessUnitRequest {
 /// Tenant-admin only — creating a business unit is organization
 /// structure, not day-to-day team work (see
 /// .ai/decisions/current/2026-08-28-tenant-admin-and-platform-manager.md).
+#[utoipa::path(
+    post,
+    path = "/api/business-units",
+    tag = "business_units",
+    request_body = CreateBusinessUnitRequest,
+    responses(
+        (status = 200, description = "Business unit created", body = entity::business_unit::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_business_unit(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -68,6 +80,15 @@ pub async fn create_business_unit(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/business-units",
+    tag = "business_units",
+    responses(
+        (status = 200, description = "List business units", body = Vec<entity::business_unit::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_business_units(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -90,7 +111,7 @@ pub async fn list_business_units(
 
 const VALID_ROLES: [&str; 3] = ["sales_design", "delivery", "finance"];
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct AssignRoleRequest {
     pub user_id: Uuid,
     pub role: String,
@@ -98,6 +119,20 @@ pub struct AssignRoleRequest {
 
 /// Assigns `role` to `user_id` for this business unit. Tenant-admin only —
 /// see .ai/decisions/current/2026-08-28-tenant-admin-and-platform-manager.md.
+#[utoipa::path(
+    post,
+    path = "/api/business-units/{id}/roles",
+    tag = "business_units",
+    params(("id" = Uuid, Path, description = "Business unit id")),
+    request_body = AssignRoleRequest,
+    responses(
+        (status = 200, description = "Role assigned", body = entity::user_business_unit_role::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn assign_role(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -170,6 +205,16 @@ pub async fn assign_role(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/business-units/{id}/roles",
+    tag = "business_units",
+    params(("id" = Uuid, Path, description = "Business unit id")),
+    responses(
+        (status = 200, description = "List role assignments", body = Vec<entity::user_business_unit_role::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_roles(
     State(state): State<AppState>,
     user: AuthenticatedUser,

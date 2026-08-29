@@ -15,7 +15,12 @@ async fn main() -> anyhow::Result<()> {
 
     let app_db = Database::connect(&config.database_url_app).await?;
     let admin_db = Database::connect(&config.database_url_admin).await?;
-    let state = AppState { app_db, admin_db };
+    let state = AppState {
+        app_db,
+        admin_db,
+        cookie_secure: config.cookie_secure,
+        cors_origin: config.cors_origin.clone(),
+    };
 
     let app = build_app(state);
 

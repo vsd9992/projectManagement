@@ -32,12 +32,25 @@ fn role_for_workstream(wt: &WorkstreamType) -> &'static str {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateScheduleTaskRequest {
     pub title: String,
     pub workstream_type: WorkstreamType,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/projects/{project_id}/schedule-tasks",
+    tag = "schedule",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    request_body = CreateScheduleTaskRequest,
+    responses(
+        (status = 200, description = "Standalone schedule task created", body = entity::schedule_task::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_schedule_task(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -105,6 +118,17 @@ pub async fn create_schedule_task(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/projects/{project_id}/schedule-tasks",
+    tag = "schedule",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "List schedule tasks", body = Vec<entity::schedule_task::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_schedule_tasks(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -129,11 +153,25 @@ pub async fn list_schedule_tasks(
     Ok(Json(items))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct UpdateScheduleTaskStatusRequest {
     pub status: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/schedule-tasks/{id}/status",
+    tag = "schedule",
+    params(("id" = Uuid, Path, description = "Schedule task id")),
+    request_body = UpdateScheduleTaskStatusRequest,
+    responses(
+        (status = 200, description = "Status updated", body = entity::schedule_task::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn update_schedule_task_status(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -188,7 +226,7 @@ pub async fn update_schedule_task_status(
     Ok(Json(model))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct UpdateDatesRequest {
     pub planned_start_date: Option<NaiveDate>,
     pub planned_end_date: Option<NaiveDate>,
@@ -209,13 +247,26 @@ fn effective_end(task: &entity::schedule_task::Model) -> Option<NaiveDate> {
 /// task's effective end moved later, triggers basic forward-pass
 /// propagation to dependents (see propagate_shift) and returns which
 /// tasks were shifted, for the caller to notify in a later stage.
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, utoipa::ToSchema)]
 pub struct UpdateDatesResponse {
     #[serde(flatten)]
     pub task: entity::schedule_task::Model,
     pub shifted_dependent_task_ids: Vec<Uuid>,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/schedule-tasks/{id}/dates",
+    tag = "schedule",
+    params(("id" = Uuid, Path, description = "Schedule task id")),
+    request_body = UpdateDatesRequest,
+    responses(
+        (status = 200, description = "Dates updated; may cascade a forward-pass shift to dependents", body = UpdateDatesResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn update_schedule_task_dates(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -437,11 +488,25 @@ async fn would_create_cycle(
     Ok(row.is_some())
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct AddScheduleDependencyRequest {
     pub depends_on_task_id: Uuid,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/schedule-tasks/{id}/dependencies",
+    tag = "schedule",
+    params(("id" = Uuid, Path, description = "Schedule task id (the dependent)")),
+    request_body = AddScheduleDependencyRequest,
+    responses(
+        (status = 200, description = "Dependency edge added", body = entity::schedule_task_dependency::Model),
+        (status = 400, description = "bad request (self-dependency, cross-project, or would create a cycle)", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn add_schedule_task_dependency(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -514,6 +579,18 @@ pub async fn add_schedule_task_dependency(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/schedule-tasks/{id}/dependencies",
+    tag = "schedule",
+    params(("id" = Uuid, Path, description = "Schedule task id")),
+    responses(
+        (status = 200, description = "List dependency edges for this task", body = Vec<entity::schedule_task_dependency::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_schedule_task_dependencies(
     State(state): State<AppState>,
     user: AuthenticatedUser,

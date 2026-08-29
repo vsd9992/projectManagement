@@ -5,6 +5,14 @@ use axum::{
 };
 use serde_json::json;
 
+/// Shape of every error response body: `{"error": "human readable message"}`.
+/// Used only for OpenAPI schema generation — `AppError::into_response`
+/// below is what actually builds the JSON.
+#[derive(serde::Serialize, utoipa::ToSchema)]
+pub struct ErrorResponse {
+    pub error: String,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error("not found")]

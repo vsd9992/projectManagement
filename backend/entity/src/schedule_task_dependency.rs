@@ -4,7 +4,7 @@ use sea_orm::entity::prelude::*;
 /// `Related` impls (both FKs point at the same `schedule_task::Entity`,
 /// and Rust disallows two `Related<T>` impls for the same target) —
 /// queries filter this table directly instead of traversing a relation.
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 #[sea_orm(table_name = "schedule_task_dependencies")]
 pub struct Model {
     pub tenant_id: Uuid,

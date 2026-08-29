@@ -17,11 +17,24 @@ use crate::{
 
 const VALID_STATUSES: [&str; 3] = ["not_started", "in_progress", "completed"];
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateProductionTaskRequest {
     pub title: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/projects/{project_id}/production-tasks",
+    tag = "manufacturing",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    request_body = CreateProductionTaskRequest,
+    responses(
+        (status = 200, description = "Production task created", body = entity::production_task::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_production_task(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -82,6 +95,17 @@ pub async fn create_production_task(
     Ok(Json(model))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/projects/{project_id}/production-tasks",
+    tag = "manufacturing",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "List production tasks", body = Vec<entity::production_task::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_production_tasks(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -112,11 +136,26 @@ pub async fn list_production_tasks(
     Ok(Json(items))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
+#[schema(as = ProductionTaskUpdateStatusRequest)]
 pub struct UpdateStatusRequest {
     pub status: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/production-tasks/{id}/status",
+    tag = "manufacturing",
+    params(("id" = Uuid, Path, description = "Production task id")),
+    request_body = UpdateStatusRequest,
+    responses(
+        (status = 200, description = "Status updated", body = entity::production_task::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn update_production_task_status(
     State(state): State<AppState>,
     user: AuthenticatedUser,

@@ -5,7 +5,7 @@ use sea_orm::entity::prelude::*;
 /// linked row here (`site_task_id` set) — dependency data lives exclusively
 /// in `schedule_task_dependencies` now, not on the leaf entities. See
 /// .ai/decisions/current/2026-08-28-phase-3-audit-and-expansion.md.
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 #[sea_orm(table_name = "schedule_tasks")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]

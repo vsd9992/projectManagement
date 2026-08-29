@@ -3,7 +3,7 @@ use sea_orm::entity::prelude::*;
 /// Minimal milestone entity — just enough for milestone-based billing to
 /// hook into. The full Schedule Task/Dependency/Milestone graph from
 /// architecture.md is later work; this is not that.
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 #[sea_orm(table_name = "milestones")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]

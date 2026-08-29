@@ -16,28 +16,39 @@ use crate::{
     state::AppState,
 };
 
-fn session_cookie(token: String) -> Cookie<'static> {
+fn session_cookie(token: String, secure: bool) -> Cookie<'static> {
     Cookie::build((session::SESSION_COOKIE_NAME, token))
         .http_only(true)
-        .secure(true)
+        .secure(secure)
         .same_site(SameSite::Lax)
         .path("/")
         .build()
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct SignupRequest {
     pub tenant_name: String,
     pub email: String,
     pub password: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct SignupResponse {
     pub tenant_id: Uuid,
     pub user_id: Uuid,
 }
 
+/// Creates a brand-new tenant and its founding admin user, and logs them in.
+#[utoipa::path(
+    post,
+    path = "/api/auth/signup",
+    tag = "auth",
+    request_body = SignupRequest,
+    responses(
+        (status = 200, description = "Tenant and founding admin created", body = SignupResponse),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn signup(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -137,17 +148,29 @@ pub async fn signup(
 
     let token = session::create_session(&state.admin_db, tenant_id, user_id).await?;
     Ok((
-        jar.add(session_cookie(token)),
+        jar.add(session_cookie(token, state.cookie_secure)),
         Json(SignupResponse { tenant_id, user_id }),
     ))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
 }
 
+/// Logs an internal user in and sets the session cookie. Empty body on
+/// success — call `GET /api/auth/me` to fetch the resulting identity.
+#[utoipa::path(
+    post,
+    path = "/api/auth/login",
+    tag = "auth",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Logged in, session cookie set"),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn login(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -164,10 +187,10 @@ pub async fn login(
     }
 
     let token = session::create_session(&state.admin_db, user.tenant_id, user.id).await?;
-    Ok(jar.add(session_cookie(token)))
+    Ok(jar.add(session_cookie(token, state.cookie_secure)))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateTeammateRequest {
     pub email: String,
     pub password: String,
@@ -179,6 +202,18 @@ pub struct CreateTeammateRequest {
 /// without this a tenant could only ever have one internal user.
 /// Tenant-admin only. No initial business-unit role is assigned; that's a
 /// separate call to `POST /business-units/:id/roles`.
+#[utoipa::path(
+    post,
+    path = "/api/users",
+    tag = "auth",
+    request_body = CreateTeammateRequest,
+    responses(
+        (status = 200, description = "Teammate created", body = SignupResponse),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_teammate(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -244,6 +279,17 @@ pub async fn create_teammate(
     }))
 }
 
+/// Logs a Client Portal user in and sets the (shared-name) session cookie.
+#[utoipa::path(
+    post,
+    path = "/api/auth/client-login",
+    tag = "auth",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Logged in, session cookie set"),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn client_login(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -262,9 +308,17 @@ pub async fn client_login(
     let token =
         session::create_client_session(&state.admin_db, client_user.tenant_id, client_user.id)
             .await?;
-    Ok(jar.add(session_cookie(token)))
+    Ok(jar.add(session_cookie(token, state.cookie_secure)))
 }
 
+/// Logs the current session out (internal or Client Portal) and clears the
+/// cookie.
+#[utoipa::path(
+    post,
+    path = "/api/auth/logout",
+    tag = "auth",
+    responses((status = 204, description = "Logged out"))
+)]
 pub async fn logout(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -281,6 +335,18 @@ pub async fn logout(
 /// decision was chosen for, but hadn't actually been built until now.
 /// Tenant-admin only; tenant-level RLS is what stops it from reaching
 /// another tenant's users.
+#[utoipa::path(
+    post,
+    path = "/api/users/{id}/revoke-sessions",
+    tag = "auth",
+    params(("id" = Uuid, Path, description = "Target user id")),
+    responses(
+        (status = 204, description = "Sessions revoked"),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn revoke_user_sessions(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -326,7 +392,7 @@ pub async fn revoke_user_sessions(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct SetTenantAdminRequest {
     pub is_tenant_admin: bool,
 }
@@ -336,6 +402,20 @@ pub struct SetTenantAdminRequest {
 /// to becoming one besides being the user who originally signed up. A user
 /// cannot demote themselves if they're the tenant's only remaining admin,
 /// to avoid a tenant permanently locking itself out of its own admin tier.
+#[utoipa::path(
+    post,
+    path = "/api/users/{id}/admin",
+    tag = "auth",
+    params(("id" = Uuid, Path, description = "Target user id")),
+    request_body = SetTenantAdminRequest,
+    responses(
+        (status = 200, description = "Admin status updated", body = entity::user::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn set_tenant_admin(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -390,4 +470,52 @@ pub async fn set_tenant_admin(
         .await
         .map_err(map_txn_err)?;
     Ok(Json(model))
+}
+
+/// Current internal user's identity — the only way a frontend can know
+/// who's logged in (and their tenant/admin status) after a page refresh,
+/// since the session cookie is httpOnly and login/signup return no
+/// persisted identity. Deliberately a narrow DTO, never the raw
+/// `user::Model`, so `password_hash` can never leak even by accident.
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct MeResponse {
+    pub user_id: Uuid,
+    pub tenant_id: Uuid,
+    pub email: String,
+    pub is_tenant_admin: bool,
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/auth/me",
+    tag = "auth",
+    responses(
+        (status = 200, description = "Current user identity", body = MeResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+    )
+)]
+pub async fn me(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+) -> Result<Json<MeResponse>, AppError> {
+    let tenant_id = user.tenant_id;
+    let model = state
+        .app_db
+        .transaction::<_, entity::user::Model, AppError>(|txn| {
+            Box::pin(async move {
+                set_tenant(txn, tenant_id).await?;
+                entity::prelude::User::find_by_id(user.user_id)
+                    .one(txn)
+                    .await?
+                    .ok_or(AppError::Unauthorized)
+            })
+        })
+        .await
+        .map_err(map_txn_err)?;
+    Ok(Json(MeResponse {
+        user_id: model.id,
+        tenant_id: model.tenant_id,
+        email: model.email,
+        is_tenant_admin: model.is_tenant_admin,
+    }))
 }

@@ -14,21 +14,33 @@ use crate::{
     state::AppState,
 };
 
-fn platform_session_cookie(token: String) -> Cookie<'static> {
+fn platform_session_cookie(token: String, secure: bool) -> Cookie<'static> {
     Cookie::build((session::PLATFORM_SESSION_COOKIE_NAME, token))
         .http_only(true)
-        .secure(true)
+        .secure(secure)
         .same_site(SameSite::Lax)
         .path("/")
         .build()
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct PlatformLoginRequest {
     pub email: String,
     pub password: String,
 }
 
+/// Logs a platform admin in and sets the (separately-named) platform
+/// session cookie.
+#[utoipa::path(
+    post,
+    path = "/api/platform/auth/login",
+    tag = "platform",
+    request_body = PlatformLoginRequest,
+    responses(
+        (status = 200, description = "Logged in, platform session cookie set"),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn platform_login(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -45,10 +57,10 @@ pub async fn platform_login(
     }
 
     let token = session::create_platform_session(&state.admin_db, admin.id).await?;
-    Ok(jar.add(platform_session_cookie(token)))
+    Ok(jar.add(platform_session_cookie(token, state.cookie_secure)))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct TenantSummary {
     pub id: Uuid,
     pub name: String,
@@ -59,6 +71,15 @@ pub struct TenantSummary {
 /// not tenant business data (leads, quotations, financials). That boundary
 /// is deliberate, not an oversight: nothing in routes::platform ever
 /// touches a tenant-scoped table.
+#[utoipa::path(
+    get,
+    path = "/api/platform/tenants",
+    tag = "platform",
+    responses(
+        (status = 200, description = "List tenants (name/status only)", body = Vec<TenantSummary>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_tenants(
     State(state): State<AppState>,
     _admin: AuthenticatedPlatformAdmin,
@@ -138,6 +159,18 @@ async fn transition_tenant_status(
         .map_err(crate::error::map_txn_err)
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/platform/tenants/{id}/pause",
+    tag = "platform",
+    params(("id" = Uuid, Path, description = "Tenant id")),
+    responses(
+        (status = 200, description = "Tenant paused", body = entity::tenant::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn pause_tenant(
     State(state): State<AppState>,
     admin: AuthenticatedPlatformAdmin,
@@ -154,6 +187,18 @@ pub async fn pause_tenant(
     Ok(Json(tenant))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/platform/tenants/{id}/resume",
+    tag = "platform",
+    params(("id" = Uuid, Path, description = "Tenant id")),
+    responses(
+        (status = 200, description = "Tenant resumed", body = entity::tenant::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn resume_tenant(
     State(state): State<AppState>,
     admin: AuthenticatedPlatformAdmin,
@@ -174,6 +219,18 @@ pub async fn resume_tenant(
 /// "undelete" endpoint: deletion is meant to be more final than pause,
 /// matching real-world SaaS convention. Terminal from either active or
 /// paused.
+#[utoipa::path(
+    post,
+    path = "/api/platform/tenants/{id}/delete",
+    tag = "platform",
+    params(("id" = Uuid, Path, description = "Tenant id")),
+    responses(
+        (status = 200, description = "Tenant soft-deleted", body = entity::tenant::Model),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn delete_tenant(
     State(state): State<AppState>,
     admin: AuthenticatedPlatformAdmin,

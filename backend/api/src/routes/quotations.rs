@@ -16,7 +16,7 @@ use crate::{
     state::AppState,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct LineItemInput {
     pub description: String,
     pub quantity: Decimal,
@@ -24,12 +24,12 @@ pub struct LineItemInput {
     pub unit_rate: Decimal,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateQuotationRequest {
     pub line_items: Vec<LineItemInput>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct QuotationResponse {
     #[serde(flatten)]
     pub quotation: entity::quotation::Model,
@@ -39,6 +39,19 @@ pub struct QuotationResponse {
 /// Creates a new versioned Quotation for a project — each call adds the next
 /// version number for that project rather than mutating a prior one, so the
 /// full quotation history stays intact.
+#[utoipa::path(
+    post,
+    path = "/api/projects/{project_id}/quotations",
+    tag = "quotations",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    request_body = CreateQuotationRequest,
+    responses(
+        (status = 200, description = "Quotation created", body = QuotationResponse),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_quotation(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -146,6 +159,17 @@ pub async fn create_quotation(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/projects/{project_id}/quotations",
+    tag = "quotations",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "List quotation versions", body = Vec<entity::quotation::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_quotations(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -177,6 +201,18 @@ pub async fn list_quotations(
     Ok(Json(items))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/quotations/{id}",
+    tag = "quotations",
+    params(("id" = Uuid, Path, description = "Quotation id")),
+    responses(
+        (status = 200, description = "Quotation detail", body = QuotationResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn get_quotation(
     State(state): State<AppState>,
     user: AuthenticatedUser,

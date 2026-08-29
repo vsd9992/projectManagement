@@ -3,7 +3,7 @@ use sea_orm::entity::prelude::*;
 /// Staged schedule tasks a Change Order requests spawning alongside (or
 /// instead of) BOQ changes — materialized into `schedule_tasks` only once
 /// the client approves, mirroring `change_order_workstream`'s pattern.
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 #[sea_orm(table_name = "change_order_schedule_tasks")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]

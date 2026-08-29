@@ -6,7 +6,7 @@ use rust_decimal::Decimal;
 /// certified_value_to_date set — the running cumulative certified value as
 /// of this bill; base_amount is the incremental delta since the prior bill).
 /// Enforced by the `invoices_method_shape` DB CHECK constraint.
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 #[sea_orm(table_name = "invoices")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]

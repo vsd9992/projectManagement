@@ -13,12 +13,22 @@ use crate::{
     state::AppState,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::IntoParams)]
 pub struct ListNotificationsQuery {
     #[serde(default)]
     pub unread_only: bool,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/notifications",
+    tag = "notifications",
+    params(ListNotificationsQuery),
+    responses(
+        (status = 200, description = "List my notifications, newest first", body = Vec<entity::notification::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_my_notifications(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -47,6 +57,17 @@ pub async fn list_my_notifications(
     Ok(Json(items))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/notifications/{id}/read",
+    tag = "notifications",
+    params(("id" = Uuid, Path, description = "Notification id")),
+    responses(
+        (status = 200, description = "Notification marked read", body = entity::notification::Model),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn mark_notification_read(
     State(state): State<AppState>,
     user: AuthenticatedUser,

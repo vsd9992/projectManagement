@@ -4,7 +4,7 @@ use sea_orm::entity::prelude::*;
 /// `client_user_id` (external Client Portal user) — enforced by a DB CHECK
 /// constraint. This is the "same session mechanism, scoped differently"
 /// design from .ai/decisions/current/2026-08-27-auth-session-based-single-login.md.
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 #[sea_orm(table_name = "sessions")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]

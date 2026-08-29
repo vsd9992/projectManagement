@@ -16,7 +16,7 @@ use crate::{
     state::AppState,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateProjectRequest {
     pub name: String,
     pub business_unit_id: Uuid,
@@ -37,13 +37,25 @@ fn default_billing_method() -> String {
     "milestone".to_string()
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct ProjectResponse {
     #[serde(flatten)]
     pub project: entity::project::Model,
     pub workstreams: Vec<entity::project_workstream::Model>,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/projects",
+    tag = "projects",
+    request_body = CreateProjectRequest,
+    responses(
+        (status = 200, description = "Project created", body = ProjectResponse),
+        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn create_project(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -149,6 +161,18 @@ pub async fn create_project(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/projects/{id}",
+    tag = "projects",
+    params(("id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "Project detail", body = ProjectResponse),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn get_project(
     State(state): State<AppState>,
     user: AuthenticatedUser,
@@ -193,6 +217,15 @@ pub async fn get_project(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/projects",
+    tag = "projects",
+    responses(
+        (status = 200, description = "List projects", body = Vec<entity::project::Model>),
+        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+    )
+)]
 pub async fn list_projects(
     State(state): State<AppState>,
     user: AuthenticatedUser,
