@@ -7,7 +7,7 @@ use std::collections::{HashSet, VecDeque};
 use entity::workstream_type::WorkstreamType;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseTransaction, DbBackend, EntityTrait,
-    QueryFilter, Set, Statement, TransactionTrait,
+    QueryFilter, QueryOrder, Set, Statement, TransactionTrait,
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -143,6 +143,7 @@ pub async fn list_schedule_tasks(
                 authz::require_project_business_unit_role(txn, user, project_id, None).await?;
                 let items = entity::prelude::ScheduleTask::find()
                     .filter(entity::schedule_task::Column::ProjectId.eq(project_id))
+                    .order_by_asc(entity::schedule_task::Column::CreatedAt)
                     .all(txn)
                     .await?;
                 Ok(items)
@@ -609,6 +610,7 @@ pub async fn list_schedule_task_dependencies(
                 authz::require_project_business_unit_role(txn, user, task.project_id, None).await?;
                 let items = entity::prelude::ScheduleTaskDependency::find()
                     .filter(entity::schedule_task_dependency::Column::TaskId.eq(task_id))
+                    .order_by_asc(entity::schedule_task_dependency::Column::CreatedAt)
                     .all(txn)
                     .await?;
                 Ok(items)

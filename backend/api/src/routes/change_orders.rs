@@ -5,7 +5,7 @@ use axum::{
 use chrono::NaiveDate;
 use entity::workstream_type::WorkstreamType;
 use rust_decimal::Decimal;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -385,6 +385,7 @@ pub async fn list_change_orders(
                 .await?;
                 let items = entity::prelude::ChangeOrder::find()
                     .filter(entity::change_order::Column::ProjectId.eq(project_id))
+                    .order_by_asc(entity::change_order::Column::CreatedAt)
                     .all(txn)
                     .await?;
                 Ok(items)
@@ -430,14 +431,17 @@ pub async fn get_change_order(
                 .await?;
                 let line_items = entity::prelude::ChangeOrderLineItem::find()
                     .filter(entity::change_order_line_item::Column::ChangeOrderId.eq(change_order_id))
+                    .order_by_asc(entity::change_order_line_item::Column::CreatedAt)
                     .all(txn)
                     .await?;
                 let workstreams = entity::prelude::ChangeOrderWorkstream::find()
                     .filter(entity::change_order_workstream::Column::ChangeOrderId.eq(change_order_id))
+                    .order_by_asc(entity::change_order_workstream::Column::CreatedAt)
                     .all(txn)
                     .await?;
                 let schedule_tasks = entity::prelude::ChangeOrderScheduleTask::find()
                     .filter(entity::change_order_schedule_task::Column::ChangeOrderId.eq(change_order_id))
+                    .order_by_asc(entity::change_order_schedule_task::Column::CreatedAt)
                     .all(txn)
                     .await?;
                 Ok(Some((change_order, line_items, workstreams, schedule_tasks)))

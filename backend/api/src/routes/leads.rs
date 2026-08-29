@@ -3,7 +3,7 @@ use axum::{
     Json,
 };
 use entity::workstream_type::WorkstreamType;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -116,6 +116,7 @@ pub async fn list_leads(
                         .await?;
                 Ok(entity::prelude::Lead::find()
                     .filter(entity::lead::Column::BusinessUnitId.is_in(bu_ids))
+                    .order_by_asc(entity::lead::Column::CreatedAt)
                     .all(txn)
                     .await?)
             })

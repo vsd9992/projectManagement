@@ -3,7 +3,7 @@ use axum::{
     Json,
 };
 use rust_decimal::Decimal;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -102,7 +102,10 @@ pub async fn list_vendors(
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_any_business_unit_role(txn, user, None).await?;
-                Ok(entity::prelude::Vendor::find().all(txn).await?)
+                Ok(entity::prelude::Vendor::find()
+                    .order_by_asc(entity::vendor::Column::CreatedAt)
+                    .all(txn)
+                    .await?)
             })
         })
         .await
@@ -289,6 +292,7 @@ pub async fn list_purchase_orders(
                 .await?;
                 let items = entity::prelude::PurchaseOrder::find()
                     .filter(entity::purchase_order::Column::ProjectId.eq(project_id))
+                    .order_by_asc(entity::purchase_order::Column::CreatedAt)
                     .all(txn)
                     .await?;
                 Ok(items)

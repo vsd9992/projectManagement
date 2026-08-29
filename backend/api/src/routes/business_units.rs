@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, State},
     Json,
 };
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set, TransactionTrait};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -99,7 +99,10 @@ pub async fn list_business_units(
         .transaction::<_, Vec<BusinessUnitModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
-                let items = entity::prelude::BusinessUnit::find().all(txn).await?;
+                let items = entity::prelude::BusinessUnit::find()
+                    .order_by_asc(entity::business_unit::Column::CreatedAt)
+                    .all(txn)
+                    .await?;
                 Ok(items)
             })
         })
@@ -228,6 +231,7 @@ pub async fn list_roles(
                 set_tenant(txn, tenant_id).await?;
                 let items = entity::prelude::UserBusinessUnitRole::find()
                     .filter(entity::user_business_unit_role::Column::BusinessUnitId.eq(business_unit_id))
+                    .order_by_asc(entity::user_business_unit_role::Column::CreatedAt)
                     .all(txn)
                     .await?;
                 Ok(items)

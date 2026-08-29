@@ -3,7 +3,7 @@ use axum::{
     Json,
 };
 use entity::workstream_type::WorkstreamType;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -239,6 +239,7 @@ pub async fn list_projects(
                 let bu_ids = authz::accessible_business_units(txn, user, None).await?;
                 let items = entity::prelude::Project::find()
                     .filter(entity::project::Column::BusinessUnitId.is_in(bu_ids))
+                    .order_by_asc(entity::project::Column::CreatedAt)
                     .all(txn)
                     .await?;
                 Ok(items)

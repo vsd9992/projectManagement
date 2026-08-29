@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, State},
     Json,
 };
-use sea_orm::{ActiveModelTrait, EntityTrait, Set, TransactionTrait};
+use sea_orm::{ActiveModelTrait, EntityTrait, QueryOrder, Set, TransactionTrait};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -186,7 +186,10 @@ pub async fn list_clients(
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_any_business_unit_role(txn, user, None).await?;
-                let items = entity::prelude::Client::find().all(txn).await?;
+                let items = entity::prelude::Client::find()
+                    .order_by_asc(entity::client::Column::CreatedAt)
+                    .all(txn)
+                    .await?;
                 Ok(items)
             })
         })

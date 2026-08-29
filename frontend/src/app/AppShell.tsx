@@ -24,8 +24,14 @@ export function AppShell() {
           <NavLink to="/" end>
             Projects
           </NavLink>
+          <NavLink to="/leads">Leads</NavLink>
           <NavLink to="/business-units">Business Units</NavLink>
           <NavLink to="/clients">Clients</NavLink>
+          <NavLink to="/vendors">Vendors</NavLink>
+          <NavLink to="/notifications">Notifications</NavLink>
+          {current.status === 'authenticated' && current.user.is_tenant_admin && (
+            <NavLink to="/tenant-settings">Tenant Settings</NavLink>
+          )}
         </nav>
         <div className="app-nav-user">
           {current.status === 'authenticated' && (

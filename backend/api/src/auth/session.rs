@@ -199,6 +199,20 @@ where
 
 pub const PLATFORM_SESSION_COOKIE_NAME: &str = "platform_session_token";
 
+/// Deletes the platform-admin session matching `token` (logout). No-op if
+/// it doesn't exist.
+pub async fn delete_platform_session(
+    db: &sea_orm::DatabaseConnection,
+    token: &str,
+) -> Result<(), AppError> {
+    let token_hash = hash_token(token);
+    entity::prelude::PlatformAdminSession::delete_many()
+        .filter(entity::platform_admin_session::Column::TokenHash.eq(token_hash))
+        .exec(db)
+        .await?;
+    Ok(())
+}
+
 pub async fn create_platform_session(
     db: &sea_orm::DatabaseConnection,
     platform_admin_id: Uuid,

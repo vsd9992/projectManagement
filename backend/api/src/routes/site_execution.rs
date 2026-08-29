@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, State},
     Json,
 };
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -176,6 +176,7 @@ pub async fn list_site_tasks(
                 .await?;
                 let items = entity::prelude::SiteTask::find()
                     .filter(entity::site_task::Column::ProjectId.eq(project_id))
+                    .order_by_asc(entity::site_task::Column::CreatedAt)
                     .all(txn)
                     .await?;
                 Ok(items)
@@ -404,6 +405,7 @@ pub async fn list_daily_logs(
                 .await?;
                 let items = entity::prelude::DailyLog::find()
                     .filter(entity::daily_log::Column::ProjectId.eq(project_id))
+                    .order_by_asc(entity::daily_log::Column::LogDate)
                     .all(txn)
                     .await?;
                 Ok(items)
@@ -527,6 +529,7 @@ pub async fn list_punch_list_items(
                 .await?;
                 let items = entity::prelude::PunchListItem::find()
                     .filter(entity::punch_list_item::Column::ProjectId.eq(project_id))
+                    .order_by_asc(entity::punch_list_item::Column::RaisedAt)
                     .all(txn)
                     .await?;
                 Ok(items)
@@ -716,6 +719,7 @@ pub async fn list_site_queries(
                 .await?;
                 let items = entity::prelude::SiteQuery::find()
                     .filter(entity::site_query::Column::ProjectId.eq(project_id))
+                    .order_by_asc(entity::site_query::Column::RaisedAt)
                     .all(txn)
                     .await?;
                 Ok(items)

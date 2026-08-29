@@ -43,6 +43,7 @@ pub async fn list_my_projects(
                 set_tenant(txn, tenant_id).await?;
                 let items = entity::prelude::Project::find()
                     .filter(entity::project::Column::ClientId.eq(client.client_id))
+                    .order_by_asc(entity::project::Column::CreatedAt)
                     .all(txn)
                     .await?;
                 Ok(items)
@@ -86,6 +87,7 @@ pub async fn list_project_design_assets(
 
                 let assets = entity::prelude::DesignAsset::find()
                     .filter(entity::design_asset::Column::ProjectId.eq(project_id))
+                    .order_by_asc(entity::design_asset::Column::CreatedAt)
                     .all(txn)
                     .await?;
 
@@ -93,11 +95,60 @@ pub async fn list_project_design_assets(
                 for asset in assets {
                     let revisions = entity::prelude::DesignRevision::find()
                         .filter(entity::design_revision::Column::DesignAssetId.eq(asset.id))
+                        .order_by_asc(entity::design_revision::Column::Version)
                         .all(txn)
                         .await?;
                     result.push(DesignAssetWithRevisions { asset, revisions });
                 }
                 Ok(result)
+            })
+        })
+        .await
+        .map_err(map_txn_err)?;
+    Ok(Json(items))
+}
+
+/// Lists a project's quotation versions for the client — the missing
+/// discovery path for the initial BOQ: a client could previously only reach
+/// a quotation whose id they already had (via a change order's
+/// base_quotation_id), with no way to find the first quotation on a project
+/// before any change order exists. Mirrors quotations::list_quotations,
+/// scoped to the client's own project like every other client_portal read.
+#[utoipa::path(
+    get,
+    path = "/api/client/projects/{project_id}/quotations",
+    tag = "client_portal",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "List quotation versions for my project", body = Vec<QuotationModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
+    )
+)]
+pub async fn list_project_quotations(
+    State(state): State<AppState>,
+    client: AuthenticatedClientUser,
+    Path(project_id): Path<Uuid>,
+) -> Result<Json<Vec<QuotationModel>>, AppError> {
+    let tenant_id = client.tenant_id;
+    let items = state
+        .app_db
+        .transaction::<_, Vec<QuotationModel>, AppError>(|txn| {
+            Box::pin(async move {
+                set_tenant(txn, tenant_id).await?;
+                let project = entity::prelude::Project::find_by_id(project_id)
+                    .one(txn)
+                    .await?
+                    .ok_or(AppError::NotFound)?;
+                if project.client_id != client.client_id {
+                    return Err(AppError::NotFound);
+                }
+                let items = entity::prelude::Quotation::find()
+                    .filter(entity::quotation::Column::ProjectId.eq(project_id))
+                    .order_by_desc(entity::quotation::Column::Version)
+                    .all(txn)
+                    .await?;
+                Ok(items)
             })
         })
         .await
@@ -407,6 +458,7 @@ pub async fn list_my_change_orders(
                 }
                 let items = entity::prelude::ChangeOrder::find()
                     .filter(entity::change_order::Column::ProjectId.eq(project_id))
+                    .order_by_asc(entity::change_order::Column::CreatedAt)
                     .all(txn)
                     .await?;
                 Ok(items)
@@ -848,6 +900,7 @@ pub async fn list_project_invoices(
                 }
                 let items = entity::prelude::Invoice::find()
                     .filter(entity::invoice::Column::ProjectId.eq(project_id))
+                    .order_by_asc(entity::invoice::Column::CreatedAt)
                     .all(txn)
                     .await?;
                 Ok(items)

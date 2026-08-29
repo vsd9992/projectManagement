@@ -129,6 +129,91 @@ export const usePlatformLogin = <TError = ErrorResponse,
       return useMutation(mutationOptions, queryClient);
     }
     /**
+ * (separately-named) platform session cookie. No platform logout endpoint
+existed at all before this — the only way to end a platform-admin
+session was for the cookie to expire (30 days).
+ * @summary Logs the current platform-admin session out and clears the
+ */
+export type platformLogoutResponse204 = {
+  data: void
+  status: 204
+}
+    
+export type platformLogoutResponseSuccess = (platformLogoutResponse204) & {
+  headers: Headers;
+};
+;
+
+export type platformLogoutResponse = (platformLogoutResponseSuccess)
+
+export const getPlatformLogoutUrl = () => {
+
+
+  
+
+  return `/api/platform/auth/logout`
+}
+
+export const platformLogout = async ( options?: RequestInit): Promise<platformLogoutResponse> => {
+  
+  return customFetch<platformLogoutResponse>(getPlatformLogoutUrl(),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getPlatformLogoutMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof platformLogout>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof platformLogout>>, TError,void, TContext> => {
+
+const mutationKey = ['platformLogout'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof platformLogout>>, void> = () => {
+          
+
+          return  platformLogout(requestOptions)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PlatformLogoutMutationResult = NonNullable<Awaited<ReturnType<typeof platformLogout>>>
+    
+    export type PlatformLogoutMutationError = unknown
+
+    /**
+ * @summary Logs the current platform-admin session out and clears the
+ */
+export const usePlatformLogout = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof platformLogout>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof platformLogout>>,
+        TError,
+        void,
+        TContext
+      > => {
+
+      const mutationOptions = getPlatformLogoutMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
  * not tenant business data (leads, quotations, financials). That boundary
 is deliberate, not an oversight: nothing in routes::platform ever
 touches a tenant-scoped table.

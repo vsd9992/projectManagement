@@ -123,6 +123,7 @@ pub async fn list_design_assets(
                 .await?;
                 let items = entity::prelude::DesignAsset::find()
                     .filter(entity::design_asset::Column::ProjectId.eq(project_id))
+                    .order_by_asc(entity::design_asset::Column::CreatedAt)
                     .all(txn)
                     .await?;
                 Ok(items)

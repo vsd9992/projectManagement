@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, State},
     Json,
 };
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set, TransactionTrait};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -126,6 +126,7 @@ pub async fn list_production_tasks(
                 .await?;
                 let items = entity::prelude::ProductionTask::find()
                     .filter(entity::production_task::Column::ProjectId.eq(project_id))
+                    .order_by_asc(entity::production_task::Column::CreatedAt)
                     .all(txn)
                     .await?;
                 Ok(items)

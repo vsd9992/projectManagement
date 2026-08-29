@@ -38,6 +38,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/users/:id/admin", post(auth::set_tenant_admin))
         .route("/platform/auth/login", post(platform::platform_login))
+        .route("/platform/auth/logout", post(platform::platform_logout))
         .route("/platform/tenants", get(platform::list_tenants))
         .route("/platform/tenants/:id/pause", post(platform::pause_tenant))
         .route(
@@ -107,6 +108,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/client/design-revisions/:id/reject",
             post(client_portal::reject_design_revision),
+        )
+        .route(
+            "/client/projects/:project_id/quotations",
+            get(client_portal::list_project_quotations),
         )
         .route(
             "/client/quotations/:id/approve",

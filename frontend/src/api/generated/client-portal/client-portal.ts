@@ -904,6 +904,135 @@ export function useListProjectInvoices<TData = Awaited<ReturnType<typeof listPro
 
 
 
+/**
+ * discovery path for the initial BOQ: a client could previously only reach
+a quotation whose id they already had (via a change order's
+base_quotation_id), with no way to find the first quotation on a project
+before any change order exists. Mirrors quotations::list_quotations,
+scoped to the client's own project like every other client_portal read.
+ * @summary Lists a project's quotation versions for the client — the missing
+ */
+export type listProjectQuotationsResponse200 = {
+  data: QuotationModel[]
+  status: 200
+}
+
+export type listProjectQuotationsResponse401 = {
+  data: ErrorResponse
+  status: 401
+}
+
+export type listProjectQuotationsResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+    
+export type listProjectQuotationsResponseSuccess = (listProjectQuotationsResponse200) & {
+  headers: Headers;
+};
+export type listProjectQuotationsResponseError = (listProjectQuotationsResponse401 | listProjectQuotationsResponse404) & {
+  headers: Headers;
+};
+
+export type listProjectQuotationsResponse = (listProjectQuotationsResponseSuccess | listProjectQuotationsResponseError)
+
+export const getListProjectQuotationsUrl = (projectId: string,) => {
+
+
+  
+
+  return `/api/client/projects/${projectId}/quotations`
+}
+
+export const listProjectQuotations = async (projectId: string, options?: RequestInit): Promise<listProjectQuotationsResponse> => {
+  
+  return customFetch<listProjectQuotationsResponse>(getListProjectQuotationsUrl(projectId),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getListProjectQuotationsQueryKey = (projectId?: string,) => {
+    return [
+    `/api/client/projects/${projectId}/quotations`
+    ] as const;
+    }
+
+    
+export const getListProjectQuotationsQueryOptions = <TData = Awaited<ReturnType<typeof listProjectQuotations>>, TError = ErrorResponse>(projectId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProjectQuotations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProjectQuotationsQueryKey(projectId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProjectQuotations>>> = ({ signal }) => listProjectQuotations(projectId, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(projectId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProjectQuotations>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListProjectQuotationsQueryResult = NonNullable<Awaited<ReturnType<typeof listProjectQuotations>>>
+export type ListProjectQuotationsQueryError = ErrorResponse
+
+
+export function useListProjectQuotations<TData = Awaited<ReturnType<typeof listProjectQuotations>>, TError = ErrorResponse>(
+ projectId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProjectQuotations>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listProjectQuotations>>,
+          TError,
+          Awaited<ReturnType<typeof listProjectQuotations>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListProjectQuotations<TData = Awaited<ReturnType<typeof listProjectQuotations>>, TError = ErrorResponse>(
+ projectId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProjectQuotations>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listProjectQuotations>>,
+          TError,
+          Awaited<ReturnType<typeof listProjectQuotations>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListProjectQuotations<TData = Awaited<ReturnType<typeof listProjectQuotations>>, TError = ErrorResponse>(
+ projectId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProjectQuotations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Lists a project's quotation versions for the client — the missing
+ */
+
+export function useListProjectQuotations<TData = Awaited<ReturnType<typeof listProjectQuotations>>, TError = ErrorResponse>(
+ projectId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProjectQuotations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListProjectQuotationsQueryOptions(projectId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
 export type approveQuotationResponse200 = {
   data: QuotationModel
   status: 200

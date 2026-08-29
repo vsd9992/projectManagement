@@ -3,7 +3,7 @@ use axum::{
     Json,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -60,6 +60,27 @@ pub async fn platform_login(
     Ok(jar.add(platform_session_cookie(token, state.cookie_secure)))
 }
 
+/// Logs the current platform-admin session out and clears the
+/// (separately-named) platform session cookie. No platform logout endpoint
+/// existed at all before this — the only way to end a platform-admin
+/// session was for the cookie to expire (30 days).
+#[utoipa::path(
+    post,
+    path = "/api/platform/auth/logout",
+    tag = "platform",
+    responses((status = 204, description = "Logged out"))
+)]
+pub async fn platform_logout(
+    State(state): State<AppState>,
+    jar: CookieJar,
+) -> Result<(CookieJar, axum::http::StatusCode), AppError> {
+    if let Some(cookie) = jar.get(session::PLATFORM_SESSION_COOKIE_NAME) {
+        session::delete_platform_session(&state.admin_db, cookie.value()).await?;
+    }
+    let jar = jar.remove(Cookie::from(session::PLATFORM_SESSION_COOKIE_NAME));
+    Ok((jar, axum::http::StatusCode::NO_CONTENT))
+}
+
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct TenantSummary {
     pub id: Uuid,
@@ -84,7 +105,10 @@ pub async fn list_tenants(
     State(state): State<AppState>,
     _admin: AuthenticatedPlatformAdmin,
 ) -> Result<Json<Vec<TenantSummary>>, AppError> {
-    let tenants = entity::prelude::Tenant::find().all(&state.admin_db).await?;
+    let tenants = entity::prelude::Tenant::find()
+        .order_by_asc(entity::tenant::Column::CreatedAt)
+        .all(&state.admin_db)
+        .await?;
     Ok(Json(
         tenants
             .into_iter()

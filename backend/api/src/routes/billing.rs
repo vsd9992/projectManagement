@@ -3,7 +3,7 @@ use axum::{
     Json,
 };
 use rust_decimal::Decimal;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set, TransactionTrait};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -112,6 +112,7 @@ pub async fn list_milestones(
                     .await?;
                 let items = entity::prelude::Milestone::find()
                     .filter(entity::milestone::Column::ProjectId.eq(project_id))
+                    .order_by_asc(entity::milestone::Column::CreatedAt)
                     .all(txn)
                     .await?;
                 Ok(items)
@@ -417,6 +418,7 @@ pub async fn list_invoices(
                 .await?;
                 let items = entity::prelude::Invoice::find()
                     .filter(entity::invoice::Column::ProjectId.eq(project_id))
+                    .order_by_asc(entity::invoice::Column::CreatedAt)
                     .all(txn)
                     .await?;
                 Ok(items)
