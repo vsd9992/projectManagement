@@ -11,7 +11,7 @@ use crate::{
     auth::session::AuthenticatedUser,
     authz,
     db::set_tenant,
-    error::{map_txn_err, AppError},
+    error::{map_txn_err, AppError, ErrorResponse},
     state::AppState,
 };
 
@@ -29,10 +29,10 @@ pub struct CreateProductionTaskRequest {
     params(("project_id" = Uuid, Path, description = "Project id")),
     request_body = CreateProductionTaskRequest,
     responses(
-        (status = 200, description = "Production task created", body = entity::production_task::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "Production task created", body = ProductionTaskModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn create_production_task(
@@ -40,7 +40,7 @@ pub async fn create_production_task(
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
     Json(req): Json<CreateProductionTaskRequest>,
-) -> Result<Json<entity::production_task::Model>, AppError> {
+) -> Result<Json<ProductionTaskModel>, AppError> {
     if req.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
     }
@@ -50,7 +50,7 @@ pub async fn create_production_task(
 
     let model = state
         .app_db
-        .transaction::<_, entity::production_task::Model, AppError>(|txn| {
+        .transaction::<_, ProductionTaskModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -101,20 +101,20 @@ pub async fn create_production_task(
     tag = "manufacturing",
     params(("project_id" = Uuid, Path, description = "Project id")),
     responses(
-        (status = 200, description = "List production tasks", body = Vec<entity::production_task::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "List production tasks", body = Vec<ProductionTaskModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn list_production_tasks(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::production_task::Model>>, AppError> {
+) -> Result<Json<Vec<ProductionTaskModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::production_task::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<ProductionTaskModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -137,8 +137,7 @@ pub async fn list_production_tasks(
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
-#[schema(as = ProductionTaskUpdateStatusRequest)]
-pub struct UpdateStatusRequest {
+pub struct ProductionTaskUpdateStatusRequest {
     pub status: String,
 }
 
@@ -147,21 +146,21 @@ pub struct UpdateStatusRequest {
     path = "/api/production-tasks/{id}/status",
     tag = "manufacturing",
     params(("id" = Uuid, Path, description = "Production task id")),
-    request_body = UpdateStatusRequest,
+    request_body = ProductionTaskUpdateStatusRequest,
     responses(
-        (status = 200, description = "Status updated", body = entity::production_task::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Status updated", body = ProductionTaskModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn update_production_task_status(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(task_id): Path<Uuid>,
-    Json(req): Json<UpdateStatusRequest>,
-) -> Result<Json<entity::production_task::Model>, AppError> {
+    Json(req): Json<ProductionTaskUpdateStatusRequest>,
+) -> Result<Json<ProductionTaskModel>, AppError> {
     if !VALID_STATUSES.contains(&req.status.as_str()) {
         return Err(AppError::BadRequest(format!(
             "status must be one of {:?}",
@@ -173,7 +172,7 @@ pub async fn update_production_task_status(
 
     let model = state
         .app_db
-        .transaction::<_, entity::production_task::Model, AppError>(|txn| {
+        .transaction::<_, ProductionTaskModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let task = entity::prelude::ProductionTask::find_by_id(task_id)
@@ -209,3 +208,5 @@ pub async fn update_production_task_status(
         .map_err(map_txn_err)?;
     Ok(Json(model))
 }
+
+use entity::production_task::Model as ProductionTaskModel;

@@ -12,6 +12,7 @@ pub struct Model {
     pub email: String,
     #[serde(skip_serializing)]
     pub password_hash: String,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
 }
 

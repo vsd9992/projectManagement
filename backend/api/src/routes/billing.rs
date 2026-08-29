@@ -12,7 +12,7 @@ use crate::{
     auth::session::AuthenticatedUser,
     authz, billing,
     db::set_tenant,
-    error::{map_txn_err, AppError},
+    error::{map_txn_err, AppError, ErrorResponse},
     state::AppState,
 };
 
@@ -30,10 +30,10 @@ pub struct CreateMilestoneRequest {
     params(("project_id" = Uuid, Path, description = "Project id")),
     request_body = CreateMilestoneRequest,
     responses(
-        (status = 200, description = "Milestone created", body = entity::milestone::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "Milestone created", body = MilestoneModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn create_milestone(
@@ -41,7 +41,7 @@ pub async fn create_milestone(
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
     Json(req): Json<CreateMilestoneRequest>,
-) -> Result<Json<entity::milestone::Model>, AppError> {
+) -> Result<Json<MilestoneModel>, AppError> {
     if req.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
     }
@@ -51,7 +51,7 @@ pub async fn create_milestone(
 
     let model = state
         .app_db
-        .transaction::<_, entity::milestone::Model, AppError>(|txn| {
+        .transaction::<_, MilestoneModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(txn, user, project_id, None)
@@ -92,20 +92,20 @@ pub async fn create_milestone(
     tag = "billing",
     params(("project_id" = Uuid, Path, description = "Project id")),
     responses(
-        (status = 200, description = "List milestones", body = Vec<entity::milestone::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "List milestones", body = Vec<MilestoneModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn list_milestones(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::milestone::Model>>, AppError> {
+) -> Result<Json<Vec<MilestoneModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::milestone::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<MilestoneModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(txn, user, project_id, None)
@@ -128,22 +128,22 @@ pub async fn list_milestones(
     tag = "billing",
     params(("id" = Uuid, Path, description = "Milestone id")),
     responses(
-        (status = 200, description = "Milestone marked completed", body = entity::milestone::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Milestone marked completed", body = MilestoneModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn complete_milestone(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(milestone_id): Path<Uuid>,
-) -> Result<Json<entity::milestone::Model>, AppError> {
+) -> Result<Json<MilestoneModel>, AppError> {
     let tenant_id = user.tenant_id;
     let model = state
         .app_db
-        .transaction::<_, entity::milestone::Model, AppError>(|txn| {
+        .transaction::<_, MilestoneModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let m = entity::prelude::Milestone::find_by_id(milestone_id)
@@ -217,11 +217,11 @@ fn default_billing_method() -> String {
     params(("project_id" = Uuid, Path, description = "Project id")),
     request_body = CreateInvoiceRequest,
     responses(
-        (status = 200, description = "Invoice raised", body = entity::invoice::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Invoice raised", body = InvoiceModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn create_invoice(
@@ -229,7 +229,7 @@ pub async fn create_invoice(
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
     Json(req): Json<CreateInvoiceRequest>,
-) -> Result<Json<entity::invoice::Model>, AppError> {
+) -> Result<Json<InvoiceModel>, AppError> {
     if req.retention_percent < Decimal::ZERO || req.retention_percent > Decimal::from(100) {
         return Err(AppError::BadRequest(
             "retention_percent must be between 0 and 100".into(),
@@ -242,7 +242,7 @@ pub async fn create_invoice(
 
     let model = state
         .app_db
-        .transaction::<_, entity::invoice::Model, AppError>(|txn| {
+        .transaction::<_, InvoiceModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -392,20 +392,20 @@ pub async fn create_invoice(
     tag = "billing",
     params(("project_id" = Uuid, Path, description = "Project id")),
     responses(
-        (status = 200, description = "List invoices", body = Vec<entity::invoice::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "List invoices", body = Vec<InvoiceModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn list_invoices(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::invoice::Model>>, AppError> {
+) -> Result<Json<Vec<InvoiceModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::invoice::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<InvoiceModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -433,22 +433,22 @@ pub async fn list_invoices(
     tag = "billing",
     params(("id" = Uuid, Path, description = "Invoice id")),
     responses(
-        (status = 200, description = "Invoice marked paid", body = entity::invoice::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Invoice marked paid", body = InvoiceModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn mark_invoice_paid(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(invoice_id): Path<Uuid>,
-) -> Result<Json<entity::invoice::Model>, AppError> {
+) -> Result<Json<InvoiceModel>, AppError> {
     let tenant_id = user.tenant_id;
     let model = state
         .app_db
-        .transaction::<_, entity::invoice::Model, AppError>(|txn| {
+        .transaction::<_, InvoiceModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let invoice = entity::prelude::Invoice::find_by_id(invoice_id)
@@ -488,3 +488,6 @@ pub async fn mark_invoice_paid(
         .map_err(map_txn_err)?;
     Ok(Json(model))
 }
+
+use entity::invoice::Model as InvoiceModel;
+use entity::milestone::Model as MilestoneModel;

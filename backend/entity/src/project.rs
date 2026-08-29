@@ -1,6 +1,7 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = ProjectModel)]
 #[sea_orm(table_name = "projects")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -13,6 +14,7 @@ pub struct Model {
     /// billing method this project's invoices use. See
     /// .ai/decisions/current/2026-08-28-phase-3-audit-and-expansion.md.
     pub billing_method: String,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
 }
 

@@ -1,6 +1,7 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = LeadModel)]
 #[sea_orm(table_name = "leads")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -12,6 +13,7 @@ pub struct Model {
     /// One of: "new", "qualified", "converted", "lost" (DB CHECK constraint).
     pub status: String,
     pub converted_project_id: Option<Uuid>,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
 }
 

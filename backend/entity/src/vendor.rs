@@ -1,6 +1,7 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = VendorModel)]
 #[sea_orm(table_name = "vendors")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -9,6 +10,7 @@ pub struct Model {
     pub name: String,
     pub contact_email: Option<String>,
     pub contact_phone: Option<String>,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
 }
 

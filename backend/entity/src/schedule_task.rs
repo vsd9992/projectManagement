@@ -1,4 +1,5 @@
 use sea_orm::entity::prelude::*;
+use super::workstream_type::WorkstreamType;
 
 /// Generalizes the old site-execution-only task+dependency model across all
 /// four workstreams, with planned/actual dates. Every `site_task` has a
@@ -6,19 +7,24 @@ use sea_orm::entity::prelude::*;
 /// in `schedule_task_dependencies` now, not on the leaf entities. See
 /// .ai/decisions/current/2026-08-28-phase-3-audit-and-expansion.md.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = ScheduleTaskModel)]
 #[sea_orm(table_name = "schedule_tasks")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     pub tenant_id: Uuid,
     pub project_id: Uuid,
-    pub workstream_type: super::workstream_type::WorkstreamType,
+    pub workstream_type: WorkstreamType,
     pub title: String,
     /// One of: "not_started", "in_progress", "done" (DB CHECK constraint).
     pub status: String,
+    #[schema(value_type = Option<String>, format = Date)]
     pub planned_start_date: Option<Date>,
+    #[schema(value_type = Option<String>, format = Date)]
     pub planned_end_date: Option<Date>,
+    #[schema(value_type = Option<String>, format = Date)]
     pub actual_start_date: Option<Date>,
+    #[schema(value_type = Option<String>, format = Date)]
     pub actual_end_date: Option<Date>,
     pub site_task_id: Option<Uuid>,
     pub production_task_id: Option<Uuid>,
@@ -26,6 +32,7 @@ pub struct Model {
     pub purchase_order_id: Option<Uuid>,
     pub spawned_by_change_order_id: Option<Uuid>,
     pub created_by: Uuid,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
 }
 

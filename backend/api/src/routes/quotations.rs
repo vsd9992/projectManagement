@@ -12,7 +12,7 @@ use crate::{
     auth::session::AuthenticatedUser,
     authz,
     db::set_tenant,
-    error::{map_txn_err, AppError},
+    error::{map_txn_err, AppError, ErrorResponse},
     state::AppState,
 };
 
@@ -32,8 +32,8 @@ pub struct CreateQuotationRequest {
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct QuotationResponse {
     #[serde(flatten)]
-    pub quotation: entity::quotation::Model,
-    pub line_items: Vec<entity::quotation_line_item::Model>,
+    pub quotation: QuotationModel,
+    pub line_items: Vec<QuotationLineItemModel>,
 }
 
 /// Creates a new versioned Quotation for a project — each call adds the next
@@ -47,9 +47,9 @@ pub struct QuotationResponse {
     request_body = CreateQuotationRequest,
     responses(
         (status = 200, description = "Quotation created", body = QuotationResponse),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn create_quotation(
@@ -76,7 +76,7 @@ pub async fn create_quotation(
 
     let (quotation, line_items) = state
         .app_db
-        .transaction::<_, (entity::quotation::Model, Vec<entity::quotation_line_item::Model>), AppError>(|txn| {
+        .transaction::<_, (QuotationModel, Vec<QuotationLineItemModel>), AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -165,20 +165,20 @@ pub async fn create_quotation(
     tag = "quotations",
     params(("project_id" = Uuid, Path, description = "Project id")),
     responses(
-        (status = 200, description = "List quotation versions", body = Vec<entity::quotation::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "List quotation versions", body = Vec<QuotationModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn list_quotations(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::quotation::Model>>, AppError> {
+) -> Result<Json<Vec<QuotationModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::quotation::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<QuotationModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -208,9 +208,9 @@ pub async fn list_quotations(
     params(("id" = Uuid, Path, description = "Quotation id")),
     responses(
         (status = 200, description = "Quotation detail", body = QuotationResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn get_quotation(
@@ -221,7 +221,7 @@ pub async fn get_quotation(
     let tenant_id = user.tenant_id;
     let result = state
         .app_db
-        .transaction::<_, Option<(entity::quotation::Model, Vec<entity::quotation_line_item::Model>)>, AppError>(|txn| {
+        .transaction::<_, Option<(QuotationModel, Vec<QuotationLineItemModel>)>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let Some(quotation) = entity::prelude::Quotation::find_by_id(quotation_id).one(txn).await? else {
@@ -250,3 +250,6 @@ pub async fn get_quotation(
         line_items,
     }))
 }
+
+use entity::quotation::Model as QuotationModel;
+use entity::quotation_line_item::Model as QuotationLineItemModel;

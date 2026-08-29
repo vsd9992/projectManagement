@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::{
     audit,
     auth::{password, session, session::AuthenticatedPlatformAdmin},
-    error::AppError,
+    error::{AppError, ErrorResponse},
     state::AppState,
 };
 
@@ -38,7 +38,7 @@ pub struct PlatformLoginRequest {
     request_body = PlatformLoginRequest,
     responses(
         (status = 200, description = "Logged in, platform session cookie set"),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
     )
 )]
 pub async fn platform_login(
@@ -77,7 +77,7 @@ pub struct TenantSummary {
     tag = "platform",
     responses(
         (status = 200, description = "List tenants (name/status only)", body = Vec<TenantSummary>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
     )
 )]
 pub async fn list_tenants(
@@ -111,12 +111,12 @@ async fn transition_tenant_status(
     tenant_id: Uuid,
     from_allowed: &[&str],
     to: &str,
-) -> Result<entity::tenant::Model, AppError> {
+) -> Result<TenantModel, AppError> {
     let from_allowed: Vec<String> = from_allowed.iter().map(|s| s.to_string()).collect();
     let to = to.to_string();
     state
         .admin_db
-        .transaction::<_, entity::tenant::Model, AppError>(|txn| {
+        .transaction::<_, TenantModel, AppError>(|txn| {
             Box::pin(async move {
                 let tenant = entity::prelude::Tenant::find_by_id(tenant_id)
                     .one(txn)
@@ -165,17 +165,17 @@ async fn transition_tenant_status(
     tag = "platform",
     params(("id" = Uuid, Path, description = "Tenant id")),
     responses(
-        (status = 200, description = "Tenant paused", body = entity::tenant::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Tenant paused", body = TenantModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn pause_tenant(
     State(state): State<AppState>,
     admin: AuthenticatedPlatformAdmin,
     Path(tenant_id): Path<Uuid>,
-) -> Result<Json<entity::tenant::Model>, AppError> {
+) -> Result<Json<TenantModel>, AppError> {
     let tenant = transition_tenant_status(
         &state,
         admin.platform_admin_id,
@@ -193,17 +193,17 @@ pub async fn pause_tenant(
     tag = "platform",
     params(("id" = Uuid, Path, description = "Tenant id")),
     responses(
-        (status = 200, description = "Tenant resumed", body = entity::tenant::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Tenant resumed", body = TenantModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn resume_tenant(
     State(state): State<AppState>,
     admin: AuthenticatedPlatformAdmin,
     Path(tenant_id): Path<Uuid>,
-) -> Result<Json<entity::tenant::Model>, AppError> {
+) -> Result<Json<TenantModel>, AppError> {
     let tenant = transition_tenant_status(
         &state,
         admin.platform_admin_id,
@@ -225,17 +225,17 @@ pub async fn resume_tenant(
     tag = "platform",
     params(("id" = Uuid, Path, description = "Tenant id")),
     responses(
-        (status = 200, description = "Tenant soft-deleted", body = entity::tenant::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Tenant soft-deleted", body = TenantModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn delete_tenant(
     State(state): State<AppState>,
     admin: AuthenticatedPlatformAdmin,
     Path(tenant_id): Path<Uuid>,
-) -> Result<Json<entity::tenant::Model>, AppError> {
+) -> Result<Json<TenantModel>, AppError> {
     let tenant = transition_tenant_status(
         &state,
         admin.platform_admin_id,
@@ -246,3 +246,5 @@ pub async fn delete_tenant(
     .await?;
     Ok(Json(tenant))
 }
+
+use entity::tenant::Model as TenantModel;

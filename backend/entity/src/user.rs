@@ -1,6 +1,7 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = UserModel)]
 #[sea_orm(table_name = "users")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -9,6 +10,7 @@ pub struct Model {
     pub email: String,
     #[serde(skip_serializing)]
     pub password_hash: String,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
     /// Authority across the whole tenant (every business unit), unlike
     /// user_business_unit_role which is per-BU. Set automatically for the

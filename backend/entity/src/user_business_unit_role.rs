@@ -1,6 +1,7 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = UserBusinessUnitRoleModel)]
 #[sea_orm(table_name = "user_business_unit_roles")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -10,6 +11,7 @@ pub struct Model {
     pub business_unit_id: Uuid,
     /// One of: "sales_design", "delivery", "finance" (enforced by a DB CHECK constraint).
     pub role: String,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
 }
 

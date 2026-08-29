@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::{
     auth::session::AuthenticatedUser,
     db::set_tenant,
-    error::{map_txn_err, AppError},
+    error::{map_txn_err, AppError, ErrorResponse},
     state::AppState,
 };
 
@@ -25,19 +25,19 @@ pub struct ListNotificationsQuery {
     tag = "notifications",
     params(ListNotificationsQuery),
     responses(
-        (status = 200, description = "List my notifications, newest first", body = Vec<entity::notification::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 200, description = "List my notifications, newest first", body = Vec<NotificationModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
     )
 )]
 pub async fn list_my_notifications(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Query(q): Query<ListNotificationsQuery>,
-) -> Result<Json<Vec<entity::notification::Model>>, AppError> {
+) -> Result<Json<Vec<NotificationModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::notification::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<NotificationModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let mut query = entity::prelude::Notification::find()
@@ -63,20 +63,20 @@ pub async fn list_my_notifications(
     tag = "notifications",
     params(("id" = Uuid, Path, description = "Notification id")),
     responses(
-        (status = 200, description = "Notification marked read", body = entity::notification::Model),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Notification marked read", body = NotificationModel),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn mark_notification_read(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(id): Path<Uuid>,
-) -> Result<Json<entity::notification::Model>, AppError> {
+) -> Result<Json<NotificationModel>, AppError> {
     let tenant_id = user.tenant_id;
     let model = state
         .app_db
-        .transaction::<_, entity::notification::Model, AppError>(|txn| {
+        .transaction::<_, NotificationModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let notif = entity::prelude::Notification::find_by_id(id)
@@ -100,3 +100,5 @@ pub async fn mark_notification_read(
         .map_err(map_txn_err)?;
     Ok(Json(model))
 }
+
+use entity::notification::Model as NotificationModel;

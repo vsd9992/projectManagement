@@ -1,15 +1,18 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = DailyLogModel)]
 #[sea_orm(table_name = "daily_logs")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     pub tenant_id: Uuid,
     pub project_id: Uuid,
+    #[schema(value_type = String, format = Date)]
     pub log_date: Date,
     pub notes: String,
     pub logged_by: Uuid,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
 }
 

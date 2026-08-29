@@ -17,7 +17,7 @@ use crate::{
     auth::session::AuthenticatedUser,
     authz,
     db::set_tenant,
-    error::{map_txn_err, AppError},
+    error::{map_txn_err, AppError, ErrorResponse},
     state::AppState,
 };
 
@@ -45,10 +45,10 @@ pub struct CreateScheduleTaskRequest {
     params(("project_id" = Uuid, Path, description = "Project id")),
     request_body = CreateScheduleTaskRequest,
     responses(
-        (status = 200, description = "Standalone schedule task created", body = entity::schedule_task::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "Standalone schedule task created", body = ScheduleTaskModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn create_schedule_task(
@@ -56,7 +56,7 @@ pub async fn create_schedule_task(
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
     Json(req): Json<CreateScheduleTaskRequest>,
-) -> Result<Json<entity::schedule_task::Model>, AppError> {
+) -> Result<Json<ScheduleTaskModel>, AppError> {
     if req.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
     }
@@ -67,7 +67,7 @@ pub async fn create_schedule_task(
 
     let model = state
         .app_db
-        .transaction::<_, entity::schedule_task::Model, AppError>(|txn| {
+        .transaction::<_, ScheduleTaskModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -124,20 +124,20 @@ pub async fn create_schedule_task(
     tag = "schedule",
     params(("project_id" = Uuid, Path, description = "Project id")),
     responses(
-        (status = 200, description = "List schedule tasks", body = Vec<entity::schedule_task::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "List schedule tasks", body = Vec<ScheduleTaskModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn list_schedule_tasks(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::schedule_task::Model>>, AppError> {
+) -> Result<Json<Vec<ScheduleTaskModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::schedule_task::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<ScheduleTaskModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(txn, user, project_id, None).await?;
@@ -165,11 +165,11 @@ pub struct UpdateScheduleTaskStatusRequest {
     params(("id" = Uuid, Path, description = "Schedule task id")),
     request_body = UpdateScheduleTaskStatusRequest,
     responses(
-        (status = 200, description = "Status updated", body = entity::schedule_task::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Status updated", body = ScheduleTaskModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn update_schedule_task_status(
@@ -177,7 +177,7 @@ pub async fn update_schedule_task_status(
     user: AuthenticatedUser,
     Path(task_id): Path<Uuid>,
     Json(req): Json<UpdateScheduleTaskStatusRequest>,
-) -> Result<Json<entity::schedule_task::Model>, AppError> {
+) -> Result<Json<ScheduleTaskModel>, AppError> {
     if !TASK_STATUSES.contains(&req.status.as_str()) {
         return Err(AppError::BadRequest(format!(
             "status must be one of {:?}",
@@ -189,7 +189,7 @@ pub async fn update_schedule_task_status(
 
     let model = state
         .app_db
-        .transaction::<_, entity::schedule_task::Model, AppError>(|txn| {
+        .transaction::<_, ScheduleTaskModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let task = entity::prelude::ScheduleTask::find_by_id(task_id)
@@ -238,7 +238,7 @@ pub struct UpdateDatesRequest {
 /// otherwise its plan. Comparing this before/after an update is what
 /// decides whether a change is a real schedule slip worth propagating
 /// (moving later), not just an edit that happens to touch the date fields.
-fn effective_end(task: &entity::schedule_task::Model) -> Option<NaiveDate> {
+fn effective_end(task: &ScheduleTaskModel) -> Option<NaiveDate> {
     task.actual_end_date.or(task.planned_end_date)
 }
 
@@ -250,7 +250,7 @@ fn effective_end(task: &entity::schedule_task::Model) -> Option<NaiveDate> {
 #[derive(serde::Serialize, utoipa::ToSchema)]
 pub struct UpdateDatesResponse {
     #[serde(flatten)]
-    pub task: entity::schedule_task::Model,
+    pub task: ScheduleTaskModel,
     pub shifted_dependent_task_ids: Vec<Uuid>,
 }
 
@@ -262,9 +262,9 @@ pub struct UpdateDatesResponse {
     request_body = UpdateDatesRequest,
     responses(
         (status = 200, description = "Dates updated; may cascade a forward-pass shift to dependents", body = UpdateDatesResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn update_schedule_task_dates(
@@ -277,7 +277,7 @@ pub async fn update_schedule_task_dates(
 
     let (task, shifted_dependent_task_ids) = state
         .app_db
-        .transaction::<_, (entity::schedule_task::Model, Vec<Uuid>), AppError>(|txn| {
+        .transaction::<_, (ScheduleTaskModel, Vec<Uuid>), AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let existing = entity::prelude::ScheduleTask::find_by_id(task_id)
@@ -500,11 +500,11 @@ pub struct AddScheduleDependencyRequest {
     params(("id" = Uuid, Path, description = "Schedule task id (the dependent)")),
     request_body = AddScheduleDependencyRequest,
     responses(
-        (status = 200, description = "Dependency edge added", body = entity::schedule_task_dependency::Model),
-        (status = 400, description = "bad request (self-dependency, cross-project, or would create a cycle)", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Dependency edge added", body = ScheduleTaskDependencyModel),
+        (status = 400, description = "bad request (self-dependency, cross-project, or would create a cycle)", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn add_schedule_task_dependency(
@@ -512,7 +512,7 @@ pub async fn add_schedule_task_dependency(
     user: AuthenticatedUser,
     Path(task_id): Path<Uuid>,
     Json(req): Json<AddScheduleDependencyRequest>,
-) -> Result<Json<entity::schedule_task_dependency::Model>, AppError> {
+) -> Result<Json<ScheduleTaskDependencyModel>, AppError> {
     if task_id == req.depends_on_task_id {
         return Err(AppError::BadRequest(
             "a task cannot depend on itself".into(),
@@ -523,7 +523,7 @@ pub async fn add_schedule_task_dependency(
 
     let model = state
         .app_db
-        .transaction::<_, entity::schedule_task_dependency::Model, AppError>(|txn| {
+        .transaction::<_, ScheduleTaskDependencyModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
 
@@ -585,21 +585,21 @@ pub async fn add_schedule_task_dependency(
     tag = "schedule",
     params(("id" = Uuid, Path, description = "Schedule task id")),
     responses(
-        (status = 200, description = "List dependency edges for this task", body = Vec<entity::schedule_task_dependency::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "List dependency edges for this task", body = Vec<ScheduleTaskDependencyModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn list_schedule_task_dependencies(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(task_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::schedule_task_dependency::Model>>, AppError> {
+) -> Result<Json<Vec<ScheduleTaskDependencyModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::schedule_task_dependency::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<ScheduleTaskDependencyModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let task = entity::prelude::ScheduleTask::find_by_id(task_id)
@@ -618,3 +618,6 @@ pub async fn list_schedule_task_dependencies(
         .map_err(map_txn_err)?;
     Ok(Json(items))
 }
+
+use entity::schedule_task::Model as ScheduleTaskModel;
+use entity::schedule_task_dependency::Model as ScheduleTaskDependencyModel;

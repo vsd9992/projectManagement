@@ -12,7 +12,7 @@ use crate::{
     auth::session::AuthenticatedUser,
     authz,
     db::set_tenant,
-    error::{map_txn_err, AppError},
+    error::{map_txn_err, AppError, ErrorResponse},
     state::AppState,
 };
 
@@ -29,17 +29,17 @@ pub struct CreateLeadRequest {
     tag = "leads",
     request_body = CreateLeadRequest,
     responses(
-        (status = 200, description = "Lead created", body = entity::lead::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "Lead created", body = LeadModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn create_lead(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Json(req): Json<CreateLeadRequest>,
-) -> Result<Json<entity::lead::Model>, AppError> {
+) -> Result<Json<LeadModel>, AppError> {
     if req.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
     }
@@ -51,7 +51,7 @@ pub async fn create_lead(
 
     let model = state
         .app_db
-        .transaction::<_, entity::lead::Model, AppError>(|txn| {
+        .transaction::<_, LeadModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_business_unit_role(
@@ -97,18 +97,18 @@ pub async fn create_lead(
     path = "/api/leads",
     tag = "leads",
     responses(
-        (status = 200, description = "List leads", body = Vec<entity::lead::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 200, description = "List leads", body = Vec<LeadModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
     )
 )]
 pub async fn list_leads(
     State(state): State<AppState>,
     user: AuthenticatedUser,
-) -> Result<Json<Vec<entity::lead::Model>>, AppError> {
+) -> Result<Json<Vec<LeadModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::lead::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<LeadModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let bu_ids =
@@ -146,8 +146,8 @@ fn default_billing_method() -> String {
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct ConvertedProjectResponse {
     #[serde(flatten)]
-    pub project: entity::project::Model,
-    pub workstreams: Vec<entity::project_workstream::Model>,
+    pub project: ProjectModel,
+    pub workstreams: Vec<ProjectWorkstreamModel>,
 }
 
 /// Converts a lead into a Project (using the lead's business unit + client)
@@ -160,10 +160,10 @@ pub struct ConvertedProjectResponse {
     request_body = ConvertLeadRequest,
     responses(
         (status = 200, description = "Lead converted to project", body = ConvertedProjectResponse),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn convert_lead(
@@ -192,7 +192,7 @@ pub async fn convert_lead(
 
     let (project, workstreams) = state
         .app_db
-        .transaction::<_, (entity::project::Model, Vec<entity::project_workstream::Model>), AppError>(|txn| {
+        .transaction::<_, (ProjectModel, Vec<ProjectWorkstreamModel>), AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
 
@@ -291,3 +291,7 @@ pub async fn convert_lead(
         workstreams,
     }))
 }
+
+use entity::lead::Model as LeadModel;
+use entity::project::Model as ProjectModel;
+use entity::project_workstream::Model as ProjectWorkstreamModel;

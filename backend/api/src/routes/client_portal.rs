@@ -13,7 +13,7 @@ use crate::{
     audit,
     auth::session::AuthenticatedClientUser,
     db::set_tenant,
-    error::{map_txn_err, AppError},
+    error::{map_txn_err, AppError, ErrorResponse},
     routes::design::DesignAssetWithRevisions,
     state::AppState,
 };
@@ -27,18 +27,18 @@ use crate::{
     path = "/api/client/projects",
     tag = "client_portal",
     responses(
-        (status = 200, description = "List my projects", body = Vec<entity::project::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 200, description = "List my projects", body = Vec<ProjectModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
     )
 )]
 pub async fn list_my_projects(
     State(state): State<AppState>,
     client: AuthenticatedClientUser,
-) -> Result<Json<Vec<entity::project::Model>>, AppError> {
+) -> Result<Json<Vec<ProjectModel>>, AppError> {
     let tenant_id = client.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::project::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<ProjectModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let items = entity::prelude::Project::find()
@@ -60,8 +60,8 @@ pub async fn list_my_projects(
     params(("project_id" = Uuid, Path, description = "Project id")),
     responses(
         (status = 200, description = "Design assets with their revisions", body = Vec<DesignAssetWithRevisions>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn list_project_design_assets(
@@ -116,12 +116,12 @@ async fn decide_revision(
     revision_id: Uuid,
     approve: bool,
     notes: Option<String>,
-) -> Result<entity::design_revision::Model, AppError> {
+) -> Result<DesignRevisionModel, AppError> {
     let tenant_id = client.tenant_id;
 
     state
         .app_db
-        .transaction::<_, entity::design_revision::Model, AppError>(|txn| {
+        .transaction::<_, DesignRevisionModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
 
@@ -183,10 +183,10 @@ async fn decide_revision(
     params(("id" = Uuid, Path, description = "Design revision id")),
     request_body = DecisionRequest,
     responses(
-        (status = 200, description = "Revision approved", body = entity::design_revision::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Revision approved", body = DesignRevisionModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn approve_design_revision(
@@ -194,7 +194,7 @@ pub async fn approve_design_revision(
     client: AuthenticatedClientUser,
     Path(revision_id): Path<Uuid>,
     Json(req): Json<DecisionRequest>,
-) -> Result<Json<entity::design_revision::Model>, AppError> {
+) -> Result<Json<DesignRevisionModel>, AppError> {
     let model = decide_revision(&state, client, revision_id, true, req.notes).await?;
     Ok(Json(model))
 }
@@ -206,10 +206,10 @@ pub async fn approve_design_revision(
     params(("id" = Uuid, Path, description = "Design revision id")),
     request_body = DecisionRequest,
     responses(
-        (status = 200, description = "Revision rejected", body = entity::design_revision::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Revision rejected", body = DesignRevisionModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn reject_design_revision(
@@ -217,7 +217,7 @@ pub async fn reject_design_revision(
     client: AuthenticatedClientUser,
     Path(revision_id): Path<Uuid>,
     Json(req): Json<DecisionRequest>,
-) -> Result<Json<entity::design_revision::Model>, AppError> {
+) -> Result<Json<DesignRevisionModel>, AppError> {
     let model = decide_revision(&state, client, revision_id, false, req.notes).await?;
     Ok(Json(model))
 }
@@ -265,12 +265,12 @@ async fn decide_quotation(
     quotation_id: Uuid,
     approve: bool,
     notes: Option<String>,
-) -> Result<entity::quotation::Model, AppError> {
+) -> Result<QuotationModel, AppError> {
     let tenant_id = client.tenant_id;
 
     state
         .app_db
-        .transaction::<_, entity::quotation::Model, AppError>(|txn| {
+        .transaction::<_, QuotationModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
 
@@ -337,10 +337,10 @@ async fn decide_quotation(
     params(("id" = Uuid, Path, description = "Quotation id")),
     request_body = DecisionRequest,
     responses(
-        (status = 200, description = "Quotation approved (supersedes any other non-terminal quotation)", body = entity::quotation::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Quotation approved (supersedes any other non-terminal quotation)", body = QuotationModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn approve_quotation(
@@ -348,7 +348,7 @@ pub async fn approve_quotation(
     client: AuthenticatedClientUser,
     Path(quotation_id): Path<Uuid>,
     Json(req): Json<DecisionRequest>,
-) -> Result<Json<entity::quotation::Model>, AppError> {
+) -> Result<Json<QuotationModel>, AppError> {
     let model = decide_quotation(&state, client, quotation_id, true, req.notes).await?;
     Ok(Json(model))
 }
@@ -360,10 +360,10 @@ pub async fn approve_quotation(
     params(("id" = Uuid, Path, description = "Quotation id")),
     request_body = DecisionRequest,
     responses(
-        (status = 200, description = "Quotation rejected", body = entity::quotation::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Quotation rejected", body = QuotationModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn reject_quotation(
@@ -371,7 +371,7 @@ pub async fn reject_quotation(
     client: AuthenticatedClientUser,
     Path(quotation_id): Path<Uuid>,
     Json(req): Json<DecisionRequest>,
-) -> Result<Json<entity::quotation::Model>, AppError> {
+) -> Result<Json<QuotationModel>, AppError> {
     let model = decide_quotation(&state, client, quotation_id, false, req.notes).await?;
     Ok(Json(model))
 }
@@ -382,20 +382,20 @@ pub async fn reject_quotation(
     tag = "client_portal",
     params(("project_id" = Uuid, Path, description = "Project id")),
     responses(
-        (status = 200, description = "List change orders for my project", body = Vec<entity::change_order::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "List change orders for my project", body = Vec<ChangeOrderModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn list_my_change_orders(
     State(state): State<AppState>,
     client: AuthenticatedClientUser,
     Path(project_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::change_order::Model>>, AppError> {
+) -> Result<Json<Vec<ChangeOrderModel>>, AppError> {
     let tenant_id = client.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::change_order::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<ChangeOrderModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let project = entity::prelude::Project::find_by_id(project_id)
@@ -423,12 +423,12 @@ async fn decide_change_order(
     change_order_id: Uuid,
     approve: bool,
     notes: Option<String>,
-) -> Result<entity::change_order::Model, AppError> {
+) -> Result<ChangeOrderModel, AppError> {
     let tenant_id = client.tenant_id;
 
     state
         .app_db
-        .transaction::<_, entity::change_order::Model, AppError>(|txn| {
+        .transaction::<_, ChangeOrderModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
 
@@ -507,7 +507,7 @@ async fn decide_change_order(
 async fn apply_change_order(
     txn: &sea_orm::DatabaseTransaction,
     tenant_id: Uuid,
-    change_order: &entity::change_order::Model,
+    change_order: &ChangeOrderModel,
     actor: audit::Actor,
 ) -> Result<Option<Uuid>, AppError> {
     let co_line_items = entity::prelude::ChangeOrderLineItem::find()
@@ -615,7 +615,7 @@ async fn apply_change_order(
 async fn apply_workstream_additions(
     txn: &sea_orm::DatabaseTransaction,
     tenant_id: Uuid,
-    change_order: &entity::change_order::Model,
+    change_order: &ChangeOrderModel,
     actor: audit::Actor,
 ) -> Result<(), AppError> {
     let requested = entity::prelude::ChangeOrderWorkstream::find()
@@ -679,7 +679,7 @@ async fn apply_workstream_additions(
 async fn apply_schedule_additions(
     txn: &sea_orm::DatabaseTransaction,
     tenant_id: Uuid,
-    change_order: &entity::change_order::Model,
+    change_order: &ChangeOrderModel,
     actor: audit::Actor,
 ) -> Result<(), AppError> {
     let staged = entity::prelude::ChangeOrderScheduleTask::find()
@@ -799,10 +799,10 @@ async fn insert_baseline_line(
     params(("id" = Uuid, Path, description = "Change order id")),
     request_body = DecisionRequest,
     responses(
-        (status = 200, description = "Change order approved (re-baselines BOQ / enables workstreams / spawns schedule tasks)", body = entity::change_order::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Change order approved (re-baselines BOQ / enables workstreams / spawns schedule tasks)", body = ChangeOrderModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn approve_change_order(
@@ -810,7 +810,7 @@ pub async fn approve_change_order(
     client: AuthenticatedClientUser,
     Path(change_order_id): Path<Uuid>,
     Json(req): Json<DecisionRequest>,
-) -> Result<Json<entity::change_order::Model>, AppError> {
+) -> Result<Json<ChangeOrderModel>, AppError> {
     let model = decide_change_order(&state, client, change_order_id, true, req.notes).await?;
     Ok(Json(model))
 }
@@ -823,20 +823,20 @@ pub async fn approve_change_order(
     tag = "client_portal",
     params(("project_id" = Uuid, Path, description = "Project id")),
     responses(
-        (status = 200, description = "List invoices for my project", body = Vec<entity::invoice::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "List invoices for my project", body = Vec<InvoiceModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn list_project_invoices(
     State(state): State<AppState>,
     client: AuthenticatedClientUser,
     Path(project_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::invoice::Model>>, AppError> {
+) -> Result<Json<Vec<InvoiceModel>>, AppError> {
     let tenant_id = client.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::invoice::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<InvoiceModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let project = entity::prelude::Project::find_by_id(project_id)
@@ -865,10 +865,10 @@ pub async fn list_project_invoices(
     params(("id" = Uuid, Path, description = "Change order id")),
     request_body = DecisionRequest,
     responses(
-        (status = 200, description = "Change order rejected (no side effects)", body = entity::change_order::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Change order rejected (no side effects)", body = ChangeOrderModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn reject_change_order(
@@ -876,7 +876,13 @@ pub async fn reject_change_order(
     client: AuthenticatedClientUser,
     Path(change_order_id): Path<Uuid>,
     Json(req): Json<DecisionRequest>,
-) -> Result<Json<entity::change_order::Model>, AppError> {
+) -> Result<Json<ChangeOrderModel>, AppError> {
     let model = decide_change_order(&state, client, change_order_id, false, req.notes).await?;
     Ok(Json(model))
 }
+
+use entity::change_order::Model as ChangeOrderModel;
+use entity::design_revision::Model as DesignRevisionModel;
+use entity::invoice::Model as InvoiceModel;
+use entity::project::Model as ProjectModel;
+use entity::quotation::Model as QuotationModel;

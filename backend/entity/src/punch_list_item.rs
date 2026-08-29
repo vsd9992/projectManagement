@@ -1,6 +1,7 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = PunchListItemModel)]
 #[sea_orm(table_name = "punch_list_items")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -11,8 +12,10 @@ pub struct Model {
     /// One of: "open", "closed" (DB CHECK constraint).
     pub status: String,
     pub raised_by: Uuid,
+    #[schema(value_type = String, format = DateTime)]
     pub raised_at: DateTimeWithTimeZone,
     pub closed_by: Option<Uuid>,
+    #[schema(value_type = Option<String>, format = DateTime)]
     pub closed_at: Option<DateTimeWithTimeZone>,
 }
 

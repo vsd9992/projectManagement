@@ -5,6 +5,7 @@ use sea_orm::entity::prelude::*;
 /// and Rust disallows two `Related<T>` impls for the same target) —
 /// queries filter this table directly instead of traversing a relation.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = ScheduleTaskDependencyModel)]
 #[sea_orm(table_name = "schedule_task_dependencies")]
 pub struct Model {
     pub tenant_id: Uuid,
@@ -12,6 +13,7 @@ pub struct Model {
     pub task_id: Uuid,
     #[sea_orm(primary_key, auto_increment = false)]
     pub depends_on_task_id: Uuid,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
 }
 

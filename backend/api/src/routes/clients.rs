@@ -11,7 +11,7 @@ use crate::{
     auth::{password, session::AuthenticatedUser},
     authz,
     db::set_tenant,
-    error::{map_txn_err, AppError},
+    error::{map_txn_err, AppError, ErrorResponse},
     state::AppState,
 };
 
@@ -26,17 +26,17 @@ pub struct CreateClientRequest {
     tag = "clients",
     request_body = CreateClientRequest,
     responses(
-        (status = 200, description = "Client created", body = entity::client::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "Client created", body = ClientModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn create_client(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Json(req): Json<CreateClientRequest>,
-) -> Result<Json<entity::client::Model>, AppError> {
+) -> Result<Json<ClientModel>, AppError> {
     if req.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".into()));
     }
@@ -46,7 +46,7 @@ pub async fn create_client(
 
     let model = state
         .app_db
-        .transaction::<_, entity::client::Model, AppError>(|txn| {
+        .transaction::<_, ClientModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_any_business_unit_role(txn, user, Some("sales_design")).await?;
@@ -94,11 +94,11 @@ pub struct CreateClientUserRequest {
     params(("client_id" = Uuid, Path, description = "Client id")),
     request_body = CreateClientUserRequest,
     responses(
-        (status = 200, description = "Client Portal login created", body = entity::client_user::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Client Portal login created", body = ClientUserModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn create_client_user(
@@ -106,7 +106,7 @@ pub async fn create_client_user(
     user: AuthenticatedUser,
     Path(client_id): Path<Uuid>,
     Json(req): Json<CreateClientUserRequest>,
-) -> Result<Json<entity::client_user::Model>, AppError> {
+) -> Result<Json<ClientUserModel>, AppError> {
     if req.email.trim().is_empty() {
         return Err(AppError::BadRequest("email is required".into()));
     }
@@ -122,7 +122,7 @@ pub async fn create_client_user(
 
     let model = state
         .app_db
-        .transaction::<_, entity::client_user::Model, AppError>(|txn| {
+        .transaction::<_, ClientUserModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_any_business_unit_role(txn, user, Some("sales_design")).await?;
@@ -170,19 +170,19 @@ pub async fn create_client_user(
     path = "/api/clients",
     tag = "clients",
     responses(
-        (status = 200, description = "List clients", body = Vec<entity::client::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "List clients", body = Vec<ClientModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn list_clients(
     State(state): State<AppState>,
     user: AuthenticatedUser,
-) -> Result<Json<Vec<entity::client::Model>>, AppError> {
+) -> Result<Json<Vec<ClientModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::client::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<ClientModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_any_business_unit_role(txn, user, None).await?;
@@ -195,3 +195,6 @@ pub async fn list_clients(
 
     Ok(Json(items))
 }
+
+use entity::client::Model as ClientModel;
+use entity::client_user::Model as ClientUserModel;

@@ -1,6 +1,7 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = DesignRevisionModel)]
 #[sea_orm(table_name = "design_revisions")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -12,8 +13,10 @@ pub struct Model {
     /// One of: "submitted", "approved", "rejected" (DB CHECK constraint).
     pub status: String,
     pub submitted_by: Uuid,
+    #[schema(value_type = String, format = DateTime)]
     pub submitted_at: DateTimeWithTimeZone,
     pub decided_by: Option<Uuid>,
+    #[schema(value_type = Option<String>, format = DateTime)]
     pub decided_at: Option<DateTimeWithTimeZone>,
     pub decision_notes: Option<String>,
 }

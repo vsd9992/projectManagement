@@ -3,6 +3,7 @@ use axum::{
     Json,
 };
 use chrono::NaiveDate;
+use entity::workstream_type::WorkstreamType;
 use rust_decimal::Decimal;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
 use serde::{Deserialize, Serialize};
@@ -13,7 +14,7 @@ use crate::{
     auth::session::AuthenticatedUser,
     authz,
     db::set_tenant,
-    error::{map_txn_err, AppError},
+    error::{map_txn_err, AppError, ErrorResponse},
     state::AppState,
 };
 
@@ -45,7 +46,7 @@ pub struct CreateChangeOrderRequest {
     /// 2026-08-28-workstream-enforcement-and-expansion.md). Takes effect
     /// only once the client approves this change order.
     #[serde(default)]
-    pub add_workstreams: Vec<entity::workstream_type::WorkstreamType>,
+    pub add_workstreams: Vec<WorkstreamType>,
     /// Schedule task(s) this Change Order requests spawning for added
     /// scope, alongside (or instead of) BOQ/workstream changes — the
     /// generalized "spawns new WBS items... re-baselines the schedule
@@ -58,7 +59,7 @@ pub struct CreateChangeOrderRequest {
 #[derive(Deserialize, utoipa::ToSchema)]
 pub struct NewScheduleTaskInput {
     pub title: String,
-    pub workstream_type: entity::workstream_type::WorkstreamType,
+    pub workstream_type: WorkstreamType,
     pub planned_start_date: Option<NaiveDate>,
     pub planned_end_date: Option<NaiveDate>,
     /// Must reference an *existing* schedule_task in this project — a
@@ -70,10 +71,10 @@ pub struct NewScheduleTaskInput {
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct ChangeOrderResponse {
     #[serde(flatten)]
-    pub change_order: entity::change_order::Model,
-    pub line_items: Vec<entity::change_order_line_item::Model>,
-    pub add_workstreams: Vec<entity::change_order_workstream::Model>,
-    pub add_schedule_tasks: Vec<entity::change_order_schedule_task::Model>,
+    pub change_order: ChangeOrderModel,
+    pub line_items: Vec<ChangeOrderLineItemModel>,
+    pub add_workstreams: Vec<ChangeOrderWorkstreamModel>,
+    pub add_schedule_tasks: Vec<ChangeOrderScheduleTaskModel>,
 }
 
 /// Proposes a Change Order against a project's currently approved quotation.
@@ -88,9 +89,9 @@ pub struct ChangeOrderResponse {
     request_body = CreateChangeOrderRequest,
     responses(
         (status = 200, description = "Change order proposed", body = ChangeOrderResponse),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn create_change_order(
@@ -125,7 +126,7 @@ pub async fn create_change_order(
 
     let (change_order, line_items, workstreams, schedule_tasks) = state
         .app_db
-        .transaction::<_, (entity::change_order::Model, Vec<entity::change_order_line_item::Model>, Vec<entity::change_order_workstream::Model>, Vec<entity::change_order_schedule_task::Model>), AppError>(|txn| {
+        .transaction::<_, (ChangeOrderModel, Vec<ChangeOrderLineItemModel>, Vec<ChangeOrderWorkstreamModel>, Vec<ChangeOrderScheduleTaskModel>), AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -359,20 +360,20 @@ pub async fn create_change_order(
     tag = "change_orders",
     params(("project_id" = Uuid, Path, description = "Project id")),
     responses(
-        (status = 200, description = "List change orders", body = Vec<entity::change_order::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "List change orders", body = Vec<ChangeOrderModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn list_change_orders(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::change_order::Model>>, AppError> {
+) -> Result<Json<Vec<ChangeOrderModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::change_order::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<ChangeOrderModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -401,9 +402,9 @@ pub async fn list_change_orders(
     params(("id" = Uuid, Path, description = "Change order id")),
     responses(
         (status = 200, description = "Change order detail", body = ChangeOrderResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn get_change_order(
@@ -414,7 +415,7 @@ pub async fn get_change_order(
     let tenant_id = user.tenant_id;
     let result = state
         .app_db
-        .transaction::<_, Option<(entity::change_order::Model, Vec<entity::change_order_line_item::Model>, Vec<entity::change_order_workstream::Model>, Vec<entity::change_order_schedule_task::Model>)>, AppError>(|txn| {
+        .transaction::<_, Option<(ChangeOrderModel, Vec<ChangeOrderLineItemModel>, Vec<ChangeOrderWorkstreamModel>, Vec<ChangeOrderScheduleTaskModel>)>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let Some(change_order) = entity::prelude::ChangeOrder::find_by_id(change_order_id).one(txn).await? else {
@@ -453,3 +454,8 @@ pub async fn get_change_order(
         add_schedule_tasks: schedule_tasks,
     }))
 }
+
+use entity::change_order::Model as ChangeOrderModel;
+use entity::change_order_line_item::Model as ChangeOrderLineItemModel;
+use entity::change_order_schedule_task::Model as ChangeOrderScheduleTaskModel;
+use entity::change_order_workstream::Model as ChangeOrderWorkstreamModel;

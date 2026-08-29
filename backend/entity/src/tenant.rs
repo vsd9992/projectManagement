@@ -1,11 +1,13 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = TenantModel)]
 #[sea_orm(table_name = "tenants")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     pub name: String,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
     /// Which regional tax/billing rule profile this tenant uses. Only
     /// "india" is implemented (see api::billing).
@@ -15,12 +17,15 @@ pub struct Model {
     /// users. Every session lookup checks this and rejects non-active
     /// tenants.
     pub status: String,
+    #[schema(value_type = Option<String>, format = DateTime)]
     pub paused_at: Option<DateTimeWithTimeZone>,
+    #[schema(value_type = Option<String>, format = DateTime)]
     pub deleted_at: Option<DateTimeWithTimeZone>,
     /// Per-tenant override of the 4 workstream types' display names, e.g.
     /// `{"site_execution": "Installation"}`. Arbitrary JSON object, not
     /// validated against the workstream catalog — a purely cosmetic label,
     /// never used for authorization/routing logic.
+    #[schema(value_type = serde_json::Value)]
     pub workstream_labels: Json,
 }
 

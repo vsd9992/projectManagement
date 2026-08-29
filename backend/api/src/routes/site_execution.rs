@@ -11,7 +11,7 @@ use crate::{
     auth::session::AuthenticatedUser,
     authz,
     db::set_tenant,
-    error::{map_txn_err, AppError},
+    error::{map_txn_err, AppError, ErrorResponse},
     state::AppState,
 };
 
@@ -27,7 +27,7 @@ pub struct CreateSiteTaskRequest {
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct SiteTaskResponse {
     #[serde(flatten)]
-    pub task: entity::site_task::Model,
+    pub task: SiteTaskModel,
     /// The linked schedule_tasks row's id — use this (not the site task's
     /// own id) to create dependencies via POST /schedule-tasks/:id/dependencies
     /// or set planned/actual dates via POST /schedule-tasks/:id/dates.
@@ -42,9 +42,9 @@ pub struct SiteTaskResponse {
     request_body = CreateSiteTaskRequest,
     responses(
         (status = 200, description = "Site task created (with linked schedule task)", body = SiteTaskResponse),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn create_site_task(
@@ -62,7 +62,7 @@ pub async fn create_site_task(
 
     let (task, schedule_task_id) = state
         .app_db
-        .transaction::<_, (entity::site_task::Model, Uuid), AppError>(|txn| {
+        .transaction::<_, (SiteTaskModel, Uuid), AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -151,20 +151,20 @@ pub async fn create_site_task(
     tag = "site_execution",
     params(("project_id" = Uuid, Path, description = "Project id")),
     responses(
-        (status = 200, description = "List site tasks", body = Vec<entity::site_task::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "List site tasks", body = Vec<SiteTaskModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn list_site_tasks(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::site_task::Model>>, AppError> {
+) -> Result<Json<Vec<SiteTaskModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::site_task::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<SiteTaskModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -187,8 +187,7 @@ pub async fn list_site_tasks(
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
-#[schema(as = SiteTaskUpdateStatusRequest)]
-pub struct UpdateStatusRequest {
+pub struct SiteTaskUpdateStatusRequest {
     pub status: String,
 }
 
@@ -197,21 +196,21 @@ pub struct UpdateStatusRequest {
     path = "/api/site-tasks/{id}/status",
     tag = "site_execution",
     params(("id" = Uuid, Path, description = "Site task id")),
-    request_body = UpdateStatusRequest,
+    request_body = SiteTaskUpdateStatusRequest,
     responses(
-        (status = 200, description = "Status updated (kept in sync on the linked schedule task)", body = entity::site_task::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Status updated (kept in sync on the linked schedule task)", body = SiteTaskModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn update_site_task_status(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(task_id): Path<Uuid>,
-    Json(req): Json<UpdateStatusRequest>,
-) -> Result<Json<entity::site_task::Model>, AppError> {
+    Json(req): Json<SiteTaskUpdateStatusRequest>,
+) -> Result<Json<SiteTaskModel>, AppError> {
     if !TASK_STATUSES.contains(&req.status.as_str()) {
         return Err(AppError::BadRequest(format!(
             "status must be one of {:?}",
@@ -223,7 +222,7 @@ pub async fn update_site_task_status(
 
     let model = state
         .app_db
-        .transaction::<_, entity::site_task::Model, AppError>(|txn| {
+        .transaction::<_, SiteTaskModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let task = entity::prelude::SiteTask::find_by_id(task_id)
@@ -308,10 +307,10 @@ pub struct CreateDailyLogRequest {
     params(("project_id" = Uuid, Path, description = "Project id")),
     request_body = CreateDailyLogRequest,
     responses(
-        (status = 200, description = "Daily log created", body = entity::daily_log::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "Daily log created", body = DailyLogModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn create_daily_log(
@@ -319,7 +318,7 @@ pub async fn create_daily_log(
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
     Json(req): Json<CreateDailyLogRequest>,
-) -> Result<Json<entity::daily_log::Model>, AppError> {
+) -> Result<Json<DailyLogModel>, AppError> {
     if req.notes.trim().is_empty() {
         return Err(AppError::BadRequest("notes is required".into()));
     }
@@ -329,7 +328,7 @@ pub async fn create_daily_log(
 
     let model = state
         .app_db
-        .transaction::<_, entity::daily_log::Model, AppError>(|txn| {
+        .transaction::<_, DailyLogModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -380,20 +379,20 @@ pub async fn create_daily_log(
     tag = "site_execution",
     params(("project_id" = Uuid, Path, description = "Project id")),
     responses(
-        (status = 200, description = "List daily logs", body = Vec<entity::daily_log::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "List daily logs", body = Vec<DailyLogModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn list_daily_logs(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::daily_log::Model>>, AppError> {
+) -> Result<Json<Vec<DailyLogModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::daily_log::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<DailyLogModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -429,10 +428,10 @@ pub struct CreatePunchListItemRequest {
     params(("project_id" = Uuid, Path, description = "Project id")),
     request_body = CreatePunchListItemRequest,
     responses(
-        (status = 200, description = "Punch list item raised", body = entity::punch_list_item::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "Punch list item raised", body = PunchListItemModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn create_punch_list_item(
@@ -440,7 +439,7 @@ pub async fn create_punch_list_item(
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
     Json(req): Json<CreatePunchListItemRequest>,
-) -> Result<Json<entity::punch_list_item::Model>, AppError> {
+) -> Result<Json<PunchListItemModel>, AppError> {
     if req.description.trim().is_empty() {
         return Err(AppError::BadRequest("description is required".into()));
     }
@@ -450,7 +449,7 @@ pub async fn create_punch_list_item(
 
     let model = state
         .app_db
-        .transaction::<_, entity::punch_list_item::Model, AppError>(|txn| {
+        .transaction::<_, PunchListItemModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -503,20 +502,20 @@ pub async fn create_punch_list_item(
     tag = "site_execution",
     params(("project_id" = Uuid, Path, description = "Project id")),
     responses(
-        (status = 200, description = "List punch list items", body = Vec<entity::punch_list_item::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "List punch list items", body = Vec<PunchListItemModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn list_punch_list_items(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::punch_list_item::Model>>, AppError> {
+) -> Result<Json<Vec<PunchListItemModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::punch_list_item::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<PunchListItemModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -544,22 +543,22 @@ pub async fn list_punch_list_items(
     tag = "site_execution",
     params(("id" = Uuid, Path, description = "Punch list item id")),
     responses(
-        (status = 200, description = "Punch list item closed", body = entity::punch_list_item::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Punch list item closed", body = PunchListItemModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn close_punch_list_item(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
-) -> Result<Json<entity::punch_list_item::Model>, AppError> {
+) -> Result<Json<PunchListItemModel>, AppError> {
     let tenant_id = user.tenant_id;
     let model = state
         .app_db
-        .transaction::<_, entity::punch_list_item::Model, AppError>(|txn| {
+        .transaction::<_, PunchListItemModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let item = entity::prelude::PunchListItem::find_by_id(item_id)
@@ -616,10 +615,10 @@ pub struct CreateSiteQueryRequest {
     params(("project_id" = Uuid, Path, description = "Project id")),
     request_body = CreateSiteQueryRequest,
     responses(
-        (status = 200, description = "Site query raised", body = entity::site_query::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "Site query raised", body = SiteQueryModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn create_site_query(
@@ -627,7 +626,7 @@ pub async fn create_site_query(
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
     Json(req): Json<CreateSiteQueryRequest>,
-) -> Result<Json<entity::site_query::Model>, AppError> {
+) -> Result<Json<SiteQueryModel>, AppError> {
     if req.subject.trim().is_empty() || req.question.trim().is_empty() {
         return Err(AppError::BadRequest("subject and question are required".into()));
     }
@@ -637,7 +636,7 @@ pub async fn create_site_query(
 
     let model = state
         .app_db
-        .transaction::<_, entity::site_query::Model, AppError>(|txn| {
+        .transaction::<_, SiteQueryModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -692,20 +691,20 @@ pub async fn create_site_query(
     tag = "site_execution",
     params(("project_id" = Uuid, Path, description = "Project id")),
     responses(
-        (status = 200, description = "List site queries", body = Vec<entity::site_query::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "List site queries", body = Vec<SiteQueryModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn list_site_queries(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::site_query::Model>>, AppError> {
+) -> Result<Json<Vec<SiteQueryModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::site_query::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<SiteQueryModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -739,11 +738,11 @@ pub struct AnswerSiteQueryRequest {
     params(("id" = Uuid, Path, description = "Site query id")),
     request_body = AnswerSiteQueryRequest,
     responses(
-        (status = 200, description = "Site query answered", body = entity::site_query::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Site query answered", body = SiteQueryModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn answer_site_query(
@@ -751,7 +750,7 @@ pub async fn answer_site_query(
     user: AuthenticatedUser,
     Path(query_id): Path<Uuid>,
     Json(req): Json<AnswerSiteQueryRequest>,
-) -> Result<Json<entity::site_query::Model>, AppError> {
+) -> Result<Json<SiteQueryModel>, AppError> {
     if req.answer.trim().is_empty() {
         return Err(AppError::BadRequest("answer is required".into()));
     }
@@ -760,7 +759,7 @@ pub async fn answer_site_query(
 
     let model = state
         .app_db
-        .transaction::<_, entity::site_query::Model, AppError>(|txn| {
+        .transaction::<_, SiteQueryModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let query = entity::prelude::SiteQuery::find_by_id(query_id)
@@ -802,3 +801,8 @@ pub async fn answer_site_query(
         .map_err(map_txn_err)?;
     Ok(Json(model))
 }
+
+use entity::daily_log::Model as DailyLogModel;
+use entity::punch_list_item::Model as PunchListItemModel;
+use entity::site_query::Model as SiteQueryModel;
+use entity::site_task::Model as SiteTaskModel;

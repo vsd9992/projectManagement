@@ -12,7 +12,7 @@ use crate::{
     audit,
     auth::{password, session, session::AuthenticatedUser},
     db::set_tenant,
-    error::{map_txn_err, AppError},
+    error::{map_txn_err, AppError, ErrorResponse},
     state::AppState,
 };
 
@@ -46,7 +46,7 @@ pub struct SignupResponse {
     request_body = SignupRequest,
     responses(
         (status = 200, description = "Tenant and founding admin created", body = SignupResponse),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
+        (status = 400, description = "bad request", body = ErrorResponse),
     )
 )]
 pub async fn signup(
@@ -168,7 +168,7 @@ pub struct LoginRequest {
     request_body = LoginRequest,
     responses(
         (status = 200, description = "Logged in, session cookie set"),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
     )
 )]
 pub async fn login(
@@ -209,9 +209,9 @@ pub struct CreateTeammateRequest {
     request_body = CreateTeammateRequest,
     responses(
         (status = 200, description = "Teammate created", body = SignupResponse),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn create_teammate(
@@ -287,7 +287,7 @@ pub async fn create_teammate(
     request_body = LoginRequest,
     responses(
         (status = 200, description = "Logged in, session cookie set"),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
     )
 )]
 pub async fn client_login(
@@ -342,9 +342,9 @@ pub async fn logout(
     params(("id" = Uuid, Path, description = "Target user id")),
     responses(
         (status = 204, description = "Sessions revoked"),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn revoke_user_sessions(
@@ -409,11 +409,11 @@ pub struct SetTenantAdminRequest {
     params(("id" = Uuid, Path, description = "Target user id")),
     request_body = SetTenantAdminRequest,
     responses(
-        (status = 200, description = "Admin status updated", body = entity::user::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Admin status updated", body = UserModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn set_tenant_admin(
@@ -421,14 +421,14 @@ pub async fn set_tenant_admin(
     user: AuthenticatedUser,
     Path(target_user_id): Path<Uuid>,
     Json(req): Json<SetTenantAdminRequest>,
-) -> Result<Json<entity::user::Model>, AppError> {
+) -> Result<Json<UserModel>, AppError> {
     crate::authz::require_tenant_admin(user)?;
     let tenant_id = user.tenant_id;
     let new_value = req.is_tenant_admin;
 
     let model = state
         .app_db
-        .transaction::<_, entity::user::Model, AppError>(|txn| {
+        .transaction::<_, UserModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let target = entity::prelude::User::find_by_id(target_user_id)
@@ -491,7 +491,7 @@ pub struct MeResponse {
     tag = "auth",
     responses(
         (status = 200, description = "Current user identity", body = MeResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
     )
 )]
 pub async fn me(
@@ -501,7 +501,7 @@ pub async fn me(
     let tenant_id = user.tenant_id;
     let model = state
         .app_db
-        .transaction::<_, entity::user::Model, AppError>(|txn| {
+        .transaction::<_, UserModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 entity::prelude::User::find_by_id(user.user_id)
@@ -519,3 +519,5 @@ pub async fn me(
         is_tenant_admin: model.is_tenant_admin,
     }))
 }
+
+use entity::user::Model as UserModel;

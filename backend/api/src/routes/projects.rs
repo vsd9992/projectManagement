@@ -12,7 +12,7 @@ use crate::{
     auth::session::AuthenticatedUser,
     authz,
     db::set_tenant,
-    error::{map_txn_err, AppError},
+    error::{map_txn_err, AppError, ErrorResponse},
     state::AppState,
 };
 
@@ -40,8 +40,8 @@ fn default_billing_method() -> String {
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct ProjectResponse {
     #[serde(flatten)]
-    pub project: entity::project::Model,
-    pub workstreams: Vec<entity::project_workstream::Model>,
+    pub project: ProjectModel,
+    pub workstreams: Vec<ProjectWorkstreamModel>,
 }
 
 #[utoipa::path(
@@ -51,9 +51,9 @@ pub struct ProjectResponse {
     request_body = CreateProjectRequest,
     responses(
         (status = 200, description = "Project created", body = ProjectResponse),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn create_project(
@@ -85,7 +85,7 @@ pub async fn create_project(
 
     let (project, workstreams) = state
         .app_db
-        .transaction::<_, (entity::project::Model, Vec<entity::project_workstream::Model>), AppError>(
+        .transaction::<_, (ProjectModel, Vec<ProjectWorkstreamModel>), AppError>(
             |txn| {
                 Box::pin(async move {
                     set_tenant(txn, tenant_id).await?;
@@ -168,9 +168,9 @@ pub async fn create_project(
     params(("id" = Uuid, Path, description = "Project id")),
     responses(
         (status = 200, description = "Project detail", body = ProjectResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn get_project(
@@ -182,7 +182,7 @@ pub async fn get_project(
 
     let result = state
         .app_db
-        .transaction::<_, Option<(entity::project::Model, Vec<entity::project_workstream::Model>)>, AppError>(
+        .transaction::<_, Option<(ProjectModel, Vec<ProjectWorkstreamModel>)>, AppError>(
             |txn| {
                 Box::pin(async move {
                     set_tenant(txn, tenant_id).await?;
@@ -222,18 +222,18 @@ pub async fn get_project(
     path = "/api/projects",
     tag = "projects",
     responses(
-        (status = 200, description = "List projects", body = Vec<entity::project::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 200, description = "List projects", body = Vec<ProjectModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
     )
 )]
 pub async fn list_projects(
     State(state): State<AppState>,
     user: AuthenticatedUser,
-) -> Result<Json<Vec<entity::project::Model>>, AppError> {
+) -> Result<Json<Vec<ProjectModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::project::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<ProjectModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let bu_ids = authz::accessible_business_units(txn, user, None).await?;
@@ -249,3 +249,6 @@ pub async fn list_projects(
 
     Ok(Json(items))
 }
+
+use entity::project::Model as ProjectModel;
+use entity::project_workstream::Model as ProjectWorkstreamModel;

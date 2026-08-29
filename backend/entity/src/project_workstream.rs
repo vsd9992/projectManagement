@@ -1,16 +1,19 @@
 use sea_orm::entity::prelude::*;
+use super::workstream_type::WorkstreamType;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = ProjectWorkstreamModel)]
 #[sea_orm(table_name = "project_workstreams")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     pub tenant_id: Uuid,
     pub project_id: Uuid,
-    pub workstream_type: super::workstream_type::WorkstreamType,
+    pub workstream_type: WorkstreamType,
     /// Free-form status for M1 (e.g. "not_started", "in_progress", "done"). A real
     /// per-workstream state machine is a later milestone, not M1 scope.
     pub status: String,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
 }
 

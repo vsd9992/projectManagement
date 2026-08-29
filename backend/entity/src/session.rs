@@ -14,7 +14,9 @@ pub struct Model {
     pub client_user_id: Option<Uuid>,
     #[serde(skip_serializing)]
     pub token_hash: String,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
+    #[schema(value_type = String, format = DateTime)]
     pub expires_at: DateTimeWithTimeZone,
 }
 

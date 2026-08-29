@@ -4,6 +4,7 @@ use sea_orm::entity::prelude::*;
 /// hook into. The full Schedule Task/Dependency/Milestone graph from
 /// architecture.md is later work; this is not that.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = MilestoneModel)]
 #[sea_orm(table_name = "milestones")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -14,7 +15,9 @@ pub struct Model {
     /// One of: "pending", "completed" (DB CHECK constraint).
     pub status: String,
     pub created_by: Uuid,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
+    #[schema(value_type = Option<String>, format = DateTime)]
     pub completed_at: Option<DateTimeWithTimeZone>,
 }
 

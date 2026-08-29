@@ -1,6 +1,7 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = ProductionTaskModel)]
 #[sea_orm(table_name = "production_tasks")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -11,6 +12,7 @@ pub struct Model {
     /// One of: "not_started", "in_progress", "completed" (DB CHECK constraint).
     pub status: String,
     pub created_by: Uuid,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
 }
 

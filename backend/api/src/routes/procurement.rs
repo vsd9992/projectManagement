@@ -12,7 +12,7 @@ use crate::{
     auth::session::AuthenticatedUser,
     authz,
     db::set_tenant,
-    error::{map_txn_err, AppError},
+    error::{map_txn_err, AppError, ErrorResponse},
     state::AppState,
 };
 
@@ -29,17 +29,17 @@ pub struct CreateVendorRequest {
     tag = "procurement",
     request_body = CreateVendorRequest,
     responses(
-        (status = 200, description = "Vendor created", body = entity::vendor::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "Vendor created", body = VendorModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn create_vendor(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Json(req): Json<CreateVendorRequest>,
-) -> Result<Json<entity::vendor::Model>, AppError> {
+) -> Result<Json<VendorModel>, AppError> {
     if req.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".into()));
     }
@@ -49,7 +49,7 @@ pub async fn create_vendor(
 
     let model = state
         .app_db
-        .transaction::<_, entity::vendor::Model, AppError>(|txn| {
+        .transaction::<_, VendorModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_any_business_unit_role(txn, user, Some("delivery")).await?;
@@ -86,19 +86,19 @@ pub async fn create_vendor(
     path = "/api/vendors",
     tag = "procurement",
     responses(
-        (status = 200, description = "List vendors", body = Vec<entity::vendor::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "List vendors", body = Vec<VendorModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn list_vendors(
     State(state): State<AppState>,
     user: AuthenticatedUser,
-) -> Result<Json<Vec<entity::vendor::Model>>, AppError> {
+) -> Result<Json<Vec<VendorModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::vendor::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<VendorModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_any_business_unit_role(txn, user, None).await?;
@@ -129,8 +129,8 @@ pub struct CreatePurchaseOrderRequest {
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct PurchaseOrderResponse {
     #[serde(flatten)]
-    pub purchase_order: entity::purchase_order::Model,
-    pub line_items: Vec<entity::purchase_order_line_item::Model>,
+    pub purchase_order: PurchaseOrderModel,
+    pub line_items: Vec<PurchaseOrderLineItemModel>,
 }
 
 #[utoipa::path(
@@ -141,9 +141,9 @@ pub struct PurchaseOrderResponse {
     request_body = CreatePurchaseOrderRequest,
     responses(
         (status = 200, description = "Purchase order created (pending_approval)", body = PurchaseOrderResponse),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn create_purchase_order(
@@ -167,7 +167,7 @@ pub async fn create_purchase_order(
 
     let (purchase_order, line_items) = state
         .app_db
-        .transaction::<_, (entity::purchase_order::Model, Vec<entity::purchase_order_line_item::Model>), AppError>(|txn| {
+        .transaction::<_, (PurchaseOrderModel, Vec<PurchaseOrderLineItemModel>), AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -264,20 +264,20 @@ pub async fn create_purchase_order(
     tag = "procurement",
     params(("project_id" = Uuid, Path, description = "Project id")),
     responses(
-        (status = 200, description = "List purchase orders", body = Vec<entity::purchase_order::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "List purchase orders", body = Vec<PurchaseOrderModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn list_purchase_orders(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::purchase_order::Model>>, AppError> {
+) -> Result<Json<Vec<PurchaseOrderModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::purchase_order::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<PurchaseOrderModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -310,11 +310,11 @@ async fn decide_purchase_order(
     po_id: Uuid,
     approve: bool,
     notes: Option<String>,
-) -> Result<entity::purchase_order::Model, AppError> {
+) -> Result<PurchaseOrderModel, AppError> {
     let tenant_id = user.tenant_id;
     state
         .app_db
-        .transaction::<_, entity::purchase_order::Model, AppError>(|txn| {
+        .transaction::<_, PurchaseOrderModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let po = entity::prelude::PurchaseOrder::find_by_id(po_id)
@@ -373,11 +373,11 @@ async fn decide_purchase_order(
     params(("id" = Uuid, Path, description = "Purchase order id")),
     request_body = PoDecisionRequest,
     responses(
-        (status = 200, description = "Purchase order approved (now open)", body = entity::purchase_order::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Purchase order approved (now open)", body = PurchaseOrderModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn approve_purchase_order(
@@ -385,7 +385,7 @@ pub async fn approve_purchase_order(
     user: AuthenticatedUser,
     Path(po_id): Path<Uuid>,
     Json(req): Json<PoDecisionRequest>,
-) -> Result<Json<entity::purchase_order::Model>, AppError> {
+) -> Result<Json<PurchaseOrderModel>, AppError> {
     let model = decide_purchase_order(&state, user, po_id, true, req.notes).await?;
     Ok(Json(model))
 }
@@ -397,11 +397,11 @@ pub async fn approve_purchase_order(
     params(("id" = Uuid, Path, description = "Purchase order id")),
     request_body = PoDecisionRequest,
     responses(
-        (status = 200, description = "Purchase order rejected (terminal)", body = entity::purchase_order::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Purchase order rejected (terminal)", body = PurchaseOrderModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn reject_purchase_order(
@@ -409,7 +409,7 @@ pub async fn reject_purchase_order(
     user: AuthenticatedUser,
     Path(po_id): Path<Uuid>,
     Json(req): Json<PoDecisionRequest>,
-) -> Result<Json<entity::purchase_order::Model>, AppError> {
+) -> Result<Json<PurchaseOrderModel>, AppError> {
     let model = decide_purchase_order(&state, user, po_id, false, req.notes).await?;
     Ok(Json(model))
 }
@@ -420,22 +420,22 @@ pub async fn reject_purchase_order(
     tag = "procurement",
     params(("id" = Uuid, Path, description = "Purchase order id")),
     responses(
-        (status = 200, description = "Purchase order marked delivered", body = entity::purchase_order::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Purchase order marked delivered", body = PurchaseOrderModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn mark_purchase_order_delivered(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(po_id): Path<Uuid>,
-) -> Result<Json<entity::purchase_order::Model>, AppError> {
+) -> Result<Json<PurchaseOrderModel>, AppError> {
     let tenant_id = user.tenant_id;
     let model = state
         .app_db
-        .transaction::<_, entity::purchase_order::Model, AppError>(|txn| {
+        .transaction::<_, PurchaseOrderModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let po = entity::prelude::PurchaseOrder::find_by_id(po_id)
@@ -478,3 +478,7 @@ pub async fn mark_purchase_order_delivered(
         .map_err(map_txn_err)?;
     Ok(Json(model))
 }
+
+use entity::purchase_order::Model as PurchaseOrderModel;
+use entity::purchase_order_line_item::Model as PurchaseOrderLineItemModel;
+use entity::vendor::Model as VendorModel;

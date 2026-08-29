@@ -11,7 +11,7 @@ use crate::{
     auth::session::AuthenticatedUser,
     authz,
     db::set_tenant,
-    error::{map_txn_err, AppError},
+    error::{map_txn_err, AppError, ErrorResponse},
     state::AppState,
 };
 
@@ -29,17 +29,17 @@ pub struct CreateBusinessUnitRequest {
     tag = "business_units",
     request_body = CreateBusinessUnitRequest,
     responses(
-        (status = 200, description = "Business unit created", body = entity::business_unit::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "Business unit created", body = BusinessUnitModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn create_business_unit(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Json(req): Json<CreateBusinessUnitRequest>,
-) -> Result<Json<entity::business_unit::Model>, AppError> {
+) -> Result<Json<BusinessUnitModel>, AppError> {
     authz::require_tenant_admin(user)?;
     if req.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".into()));
@@ -50,7 +50,7 @@ pub async fn create_business_unit(
 
     let model = state
         .app_db
-        .transaction::<_, entity::business_unit::Model, AppError>(|txn| {
+        .transaction::<_, BusinessUnitModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let am = entity::business_unit::ActiveModel {
@@ -85,18 +85,18 @@ pub async fn create_business_unit(
     path = "/api/business-units",
     tag = "business_units",
     responses(
-        (status = 200, description = "List business units", body = Vec<entity::business_unit::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 200, description = "List business units", body = Vec<BusinessUnitModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
     )
 )]
 pub async fn list_business_units(
     State(state): State<AppState>,
     user: AuthenticatedUser,
-) -> Result<Json<Vec<entity::business_unit::Model>>, AppError> {
+) -> Result<Json<Vec<BusinessUnitModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::business_unit::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<BusinessUnitModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let items = entity::prelude::BusinessUnit::find().all(txn).await?;
@@ -126,11 +126,11 @@ pub struct AssignRoleRequest {
     params(("id" = Uuid, Path, description = "Business unit id")),
     request_body = AssignRoleRequest,
     responses(
-        (status = 200, description = "Role assigned", body = entity::user_business_unit_role::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Role assigned", body = UserBusinessUnitRoleModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn assign_role(
@@ -138,7 +138,7 @@ pub async fn assign_role(
     user: AuthenticatedUser,
     Path(business_unit_id): Path<Uuid>,
     Json(req): Json<AssignRoleRequest>,
-) -> Result<Json<entity::user_business_unit_role::Model>, AppError> {
+) -> Result<Json<UserBusinessUnitRoleModel>, AppError> {
     authz::require_tenant_admin(user)?;
     if !VALID_ROLES.contains(&req.role.as_str()) {
         return Err(AppError::BadRequest(format!(
@@ -153,7 +153,7 @@ pub async fn assign_role(
 
     let model = state
         .app_db
-        .transaction::<_, entity::user_business_unit_role::Model, AppError>(|txn| {
+        .transaction::<_, UserBusinessUnitRoleModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
 
@@ -211,19 +211,19 @@ pub async fn assign_role(
     tag = "business_units",
     params(("id" = Uuid, Path, description = "Business unit id")),
     responses(
-        (status = 200, description = "List role assignments", body = Vec<entity::user_business_unit_role::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
+        (status = 200, description = "List role assignments", body = Vec<UserBusinessUnitRoleModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
     )
 )]
 pub async fn list_roles(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(business_unit_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::user_business_unit_role::Model>>, AppError> {
+) -> Result<Json<Vec<UserBusinessUnitRoleModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::user_business_unit_role::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<UserBusinessUnitRoleModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let items = entity::prelude::UserBusinessUnitRole::find()
@@ -237,3 +237,6 @@ pub async fn list_roles(
         .map_err(map_txn_err)?;
     Ok(Json(items))
 }
+
+use entity::business_unit::Model as BusinessUnitModel;
+use entity::user_business_unit_role::Model as UserBusinessUnitRoleModel;

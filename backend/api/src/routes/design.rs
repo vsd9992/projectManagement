@@ -11,7 +11,7 @@ use crate::{
     auth::session::AuthenticatedUser,
     authz,
     db::set_tenant,
-    error::{map_txn_err, AppError},
+    error::{map_txn_err, AppError, ErrorResponse},
     state::AppState,
 };
 
@@ -27,10 +27,10 @@ pub struct CreateDesignAssetRequest {
     params(("project_id" = Uuid, Path, description = "Project id")),
     request_body = CreateDesignAssetRequest,
     responses(
-        (status = 200, description = "Design asset created", body = entity::design_asset::Model),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "Design asset created", body = DesignAssetModel),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn create_design_asset(
@@ -38,7 +38,7 @@ pub async fn create_design_asset(
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
     Json(req): Json<CreateDesignAssetRequest>,
-) -> Result<Json<entity::design_asset::Model>, AppError> {
+) -> Result<Json<DesignAssetModel>, AppError> {
     if req.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
     }
@@ -48,7 +48,7 @@ pub async fn create_design_asset(
 
     let model = state
         .app_db
-        .transaction::<_, entity::design_asset::Model, AppError>(|txn| {
+        .transaction::<_, DesignAssetModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -98,20 +98,20 @@ pub async fn create_design_asset(
     tag = "design",
     params(("project_id" = Uuid, Path, description = "Project id")),
     responses(
-        (status = 200, description = "List design assets", body = Vec<entity::design_asset::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
+        (status = 200, description = "List design assets", body = Vec<DesignAssetModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
     )
 )]
 pub async fn list_design_assets(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::design_asset::Model>>, AppError> {
+) -> Result<Json<Vec<DesignAssetModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::design_asset::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<DesignAssetModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 authz::require_project_business_unit_role(
@@ -148,10 +148,10 @@ pub struct SubmitRevisionRequest {
     params(("id" = Uuid, Path, description = "Design asset id")),
     request_body = SubmitRevisionRequest,
     responses(
-        (status = 200, description = "Revision submitted", body = entity::design_revision::Model),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "Revision submitted", body = DesignRevisionModel),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn submit_design_revision(
@@ -159,14 +159,14 @@ pub async fn submit_design_revision(
     user: AuthenticatedUser,
     Path(design_asset_id): Path<Uuid>,
     Json(req): Json<SubmitRevisionRequest>,
-) -> Result<Json<entity::design_revision::Model>, AppError> {
+) -> Result<Json<DesignRevisionModel>, AppError> {
     let tenant_id = user.tenant_id;
     let id = Uuid::new_v4();
     let notes = req.notes.clone();
 
     let model = state
         .app_db
-        .transaction::<_, entity::design_revision::Model, AppError>(|txn| {
+        .transaction::<_, DesignRevisionModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let asset = entity::prelude::DesignAsset::find_by_id(design_asset_id)
@@ -229,21 +229,21 @@ pub async fn submit_design_revision(
     tag = "design",
     params(("id" = Uuid, Path, description = "Design asset id")),
     responses(
-        (status = 200, description = "List design revisions", body = Vec<entity::design_revision::Model>),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 200, description = "List design revisions", body = Vec<DesignRevisionModel>),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn list_design_revisions(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Path(design_asset_id): Path<Uuid>,
-) -> Result<Json<Vec<entity::design_revision::Model>>, AppError> {
+) -> Result<Json<Vec<DesignRevisionModel>>, AppError> {
     let tenant_id = user.tenant_id;
     let items = state
         .app_db
-        .transaction::<_, Vec<entity::design_revision::Model>, AppError>(|txn| {
+        .transaction::<_, Vec<DesignRevisionModel>, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let asset = entity::prelude::DesignAsset::find_by_id(design_asset_id)
@@ -273,6 +273,9 @@ pub async fn list_design_revisions(
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct DesignAssetWithRevisions {
     #[serde(flatten)]
-    pub asset: entity::design_asset::Model,
-    pub revisions: Vec<entity::design_revision::Model>,
+    pub asset: DesignAssetModel,
+    pub revisions: Vec<DesignRevisionModel>,
 }
+
+use entity::design_asset::Model as DesignAssetModel;
+use entity::design_revision::Model as DesignRevisionModel;

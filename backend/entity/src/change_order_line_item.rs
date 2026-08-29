@@ -2,6 +2,7 @@ use sea_orm::entity::prelude::*;
 use rust_decimal::Decimal;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = ChangeOrderLineItemModel)]
 #[sea_orm(table_name = "change_order_line_items")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -18,6 +19,7 @@ pub struct Model {
     pub unit: String,
     pub unit_rate: Decimal,
     pub amount: Decimal,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
 }
 

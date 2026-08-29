@@ -12,8 +12,11 @@ pub struct Model {
     pub action: String,
     pub actor_user_id: Option<Uuid>,
     pub actor_client_user_id: Option<Uuid>,
+    #[schema(value_type = Option<serde_json::Value>)]
     pub before_data: Option<Json>,
+    #[schema(value_type = Option<serde_json::Value>)]
     pub after_data: Option<Json>,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
 }
 

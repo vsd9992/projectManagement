@@ -7,6 +7,7 @@ use rust_decimal::Decimal;
 /// of this bill; base_amount is the incremental delta since the prior bill).
 /// Enforced by the `invoices_method_shape` DB CHECK constraint.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = InvoiceModel)]
 #[sea_orm(table_name = "invoices")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -26,7 +27,9 @@ pub struct Model {
     /// One of: "raised", "paid" (DB CHECK constraint).
     pub status: String,
     pub raised_by: Uuid,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
+    #[schema(value_type = Option<String>, format = DateTime)]
     pub paid_at: Option<DateTimeWithTimeZone>,
 }
 

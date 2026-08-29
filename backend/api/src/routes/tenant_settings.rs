@@ -7,7 +7,7 @@ use crate::{
     auth::session::AuthenticatedUser,
     authz,
     db::set_tenant,
-    error::{map_txn_err, AppError},
+    error::{map_txn_err, AppError, ErrorResponse},
     state::AppState,
 };
 
@@ -29,8 +29,8 @@ pub struct TenantSettingsResponse {
     tag = "tenant_settings",
     responses(
         (status = 200, description = "Tenant settings", body = TenantSettingsResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn get_tenant_settings(
@@ -40,7 +40,7 @@ pub async fn get_tenant_settings(
     let tenant_id = user.tenant_id;
     let tenant = state
         .app_db
-        .transaction::<_, entity::tenant::Model, AppError>(|txn| {
+        .transaction::<_, TenantModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 entity::prelude::Tenant::find_by_id(tenant_id)
@@ -70,10 +70,10 @@ pub struct UpdateTenantSettingsRequest {
     request_body = UpdateTenantSettingsRequest,
     responses(
         (status = 200, description = "Tenant settings updated", body = TenantSettingsResponse),
-        (status = 400, description = "bad request", body = crate::error::ErrorResponse),
-        (status = 401, description = "unauthorized", body = crate::error::ErrorResponse),
-        (status = 403, description = "forbidden", body = crate::error::ErrorResponse),
-        (status = 404, description = "not found", body = crate::error::ErrorResponse),
+        (status = 400, description = "bad request", body = ErrorResponse),
+        (status = 401, description = "unauthorized", body = ErrorResponse),
+        (status = 403, description = "forbidden", body = ErrorResponse),
+        (status = 404, description = "not found", body = ErrorResponse),
     )
 )]
 pub async fn update_tenant_settings(
@@ -93,7 +93,7 @@ pub async fn update_tenant_settings(
 
     let tenant = state
         .app_db
-        .transaction::<_, entity::tenant::Model, AppError>(|txn| {
+        .transaction::<_, TenantModel, AppError>(|txn| {
             Box::pin(async move {
                 set_tenant(txn, tenant_id).await?;
                 let existing = entity::prelude::Tenant::find_by_id(tenant_id)
@@ -136,3 +136,5 @@ pub async fn update_tenant_settings(
         workstream_labels: tenant.workstream_labels,
     }))
 }
+
+use entity::tenant::Model as TenantModel;

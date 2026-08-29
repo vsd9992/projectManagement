@@ -1,6 +1,7 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = PurchaseOrderModel)]
 #[sea_orm(table_name = "purchase_orders")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -15,9 +16,12 @@ pub struct Model {
     /// delivery can be recorded.
     pub status: String,
     pub created_by: Uuid,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
+    #[schema(value_type = Option<String>, format = DateTime)]
     pub delivered_at: Option<DateTimeWithTimeZone>,
     pub decided_by: Option<Uuid>,
+    #[schema(value_type = Option<String>, format = DateTime)]
     pub decided_at: Option<DateTimeWithTimeZone>,
     pub decision_notes: Option<String>,
 }

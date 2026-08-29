@@ -1,6 +1,7 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[schema(as = DesignAssetModel)]
 #[sea_orm(table_name = "design_assets")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -8,6 +9,7 @@ pub struct Model {
     pub tenant_id: Uuid,
     pub project_id: Uuid,
     pub title: String,
+    #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
 }
 
